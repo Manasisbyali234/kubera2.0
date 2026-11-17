@@ -137,5 +137,31 @@ export function buildSeedData() {
     }
   });
 
+  // Dummy Day Book transactions for demo
+  const demoLoan1 = loans.find((l) => l.no === 'GL/2026-27/A001');
+  const demoLoan2 = loans.find((l) => l.no === 'GL/2026-27/A002');
+  if (demoLoan1) {
+    payments.push({
+      id: uid('p'),
+      loanId: demoLoan1.id,
+      amount: 500,
+      note: 'Monthly interest payment',
+      date: new Date().toISOString().slice(0, 10),
+      colType: 'interest',
+      method: 'Cash',
+    });
+  }
+  if (demoLoan2) {
+    payments.push({
+      id: uid('p'),
+      loanId: demoLoan2.id,
+      amount: 800,
+      note: 'Partial capital repayment',
+      date: new Date().toISOString().slice(0, 10),
+      colType: 'partial',
+      method: 'UPI',
+    });
+  }
+
   return { customers, loans, payments };
 }

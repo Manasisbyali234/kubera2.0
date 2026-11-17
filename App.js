@@ -138,7 +138,7 @@ export default function App() {
       loans: <S.Loans {...p} />,
       reports: <S.Reports {...p} />,
       reportsMenu: <S.ReportsMenu {...p} />,
-      ledger: <S.CustomerLedger db={db} back={() => setTab('home')} />,
+      ledger: <S.CustomerLedger db={db} back={() => setTab('home')} onMenuPress={() => setMenuOpen(true)} go={go} />,
       more: <S.Backup {...p} lock={() => setOk(false)} />,
       settings: <S.Profile {...p} />,
       terms: <S.TermsView db={db} back={() => setTab('home')} />,
@@ -180,7 +180,7 @@ export default function App() {
       <>
         {tab === 'home'
           ? <KHeader onMenuPress={() => setMenuOpen(true)} onRefreshPress={toggleOrientation} />
-          : <Header title={titles[tab]} onBack={backToHome} left={menuBtn} right={rotateBtn} />
+          : tab !== 'ledger' && <Header title={titles[tab]} onBack={backToHome} left={menuBtn} right={rotateBtn} />
         }
         {body[tab]}
         <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>

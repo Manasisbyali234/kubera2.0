@@ -39,6 +39,31 @@ export const Chip = ({ text, color }) => (
 );
 export const Empty = ({ text }) => <Text style={{ color: C.mute, textAlign: 'center', marginTop: 40 }}>{text}</Text>;
 
+/* Delete PIN modal — always requires PIN "Mahi" before deleting */
+export function DeletePinModal({ visible, onOk, onCancel }) {
+  const [pin, setPin] = useState('');
+  const check = () => {
+    if (pin === 'Mahi') { setPin(''); onOk(); }
+    else { setPin(''); if (Platform.OS === 'web') window.alert('Wrong PIN'); else require('react-native').Alert.alert('Wrong PIN', ''); }
+  };
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 28 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20 }}>
+          <Text style={{ fontWeight: '700', fontSize: 16, marginBottom: 4, color: C.text }}>🔒 Enter PIN to Delete</Text>
+          <Text style={{ color: C.mute, fontSize: 13, marginBottom: 12 }}>This action is protected. Enter your PIN to continue.</Text>
+          <TextInput value={pin} onChangeText={setPin} secureTextEntry placeholder="PIN" placeholderTextColor="#9AA7B4"
+            style={[s.input, { marginBottom: 12 }]} autoFocus />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Btn title="Cancel" kind="ghost" onPress={() => { setPin(''); onCancel(); }} style={{ flex: 1 }} />
+            <Btn title="Confirm Delete" onPress={check} style={{ flex: 1, backgroundColor: '#B93A2E' }} />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 /* Password gate modal — shows a PIN/password prompt, calls onOk() on success */
 export function PasswordModal({ visible, storedPassword, onOk, onCancel, title = 'Enter edit password' }) {
   const [pw, setPw] = useState('');
@@ -90,9 +115,10 @@ export function SuggestField({ label, value, onChangeText, suggestions = [], ...
 
 /* Draw-to-sign signature pad */
 export function SignaturePad({ value, onChange }) {
-  const [paths, setPaths] = useState([]);
+  const init = Array.isArray(value) && value.length > 0 ? value : [];
+  const [paths, setPaths] = useState(init);
   const current = useRef([]);
-  const allPaths = useRef([]);
+  const allPaths = useRef(init);
 
   const toD = (pts) => pts.length < 2 ? '' : pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
 

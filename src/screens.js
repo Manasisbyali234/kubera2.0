@@ -7,8 +7,9 @@ import { ActionSheetIOS, Image, Modal, Platform, ScrollView, Share, Switch, Text
 import Svg, { Path } from 'react-native-svg';
 import * as XLSX from 'xlsx';
 import { LIMIT, saveImage } from './storage';
-import { Btn, C, CalendarPicker, Card, Chip, Empty, Field, Header, PasswordModal, Row, s, SignaturePad, SuggestField } from './ui';
+import { Btn, C, CalendarPicker, Card, Chip, DeletePinModal, Empty, Field, Header, PasswordModal, Row, s, SignaturePad, SuggestField } from './ui';
 import { addMonths, calc, confirm, dmy, inr, monthsBetween, nextCustomerSerial, nextSerial, notify, today, uid } from './utils';
+import { LedgerReportFormat, YearwiseKannadaReport } from './reports';
 
 const METALS = ['Gold', 'Silver', 'Others'];
 const PAY_METHODS = ['Cash', 'UPI', 'Bank'];
@@ -50,6 +51,20 @@ export function HomeScreen({ db, update, go }) {
     .filter((p) => p.date && p.date.startsWith(currentMonth))
     .reduce((s, p) => s + p.amount, 0);
 
+  // Filtered transactions and items for search
+  const filteredPayments = db.payments.filter((p) => {
+    if (!searchQ) return true;
+    const loan = db.loans.find((l) => l.id === p.loanId) || {};
+    const cust = db.customers.find((c) => c.id === loan.customerId) || {};
+    return (cust.name + (loan.no || '') + (p.colType || '')).toLowerCase().includes(searchQ.toLowerCase());
+  });
+  const filteredLoansItems = db.loans.filter((l) => {
+    if (!searchQ) return true;
+    const cust = db.customers.find((c) => c.id === l.customerId) || {};
+    const orns = l.ornaments || [{ desc: l.itemDesc || '' }];
+    return (cust.name + l.no + orns.map((o) => o.desc).join(' ')).toLowerCase().includes(searchQ.toLowerCase());
+  });
+
   // Party list = customers with active loans
   const parties = db.customers
     .filter((c) => (c.name + (c.phone || '')).toLowerCase().includes(searchQ.toLowerCase()))
@@ -90,7 +105,7 @@ export function HomeScreen({ db, update, go }) {
           <TextInput
             value={searchQ}
             onChangeText={setSearchQ}
-            placeholder="Search Party"
+            placeholder={activeTab === 'Parties' ? 'Search Party' : activeTab === 'Transactions' ? 'Search transactions…' : 'Search items…'}
             placeholderTextColor="#9AA7B4"
             style={{ flex: 1, paddingVertical: 10, fontSize: 14, color: C.text }}
           />
@@ -125,7 +140,7 @@ export function HomeScreen({ db, update, go }) {
       )}
       {activeTab === 'Transactions' && (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 100 }}>
-          {db.payments.length === 0 ? <Empty text="No transactions yet." /> : db.payments.slice(0, 50).map((p) => {
+          {filteredPayments.length === 0 ? <Empty text="No transactions found." /> : filteredPayments.slice(0, 50).map((p) => {
             const loan = db.loans.find((l) => l.id === p.loanId) || {};
             const cust = db.customers.find((c) => c.id === loan.customerId) || {};
             return (
@@ -143,7 +158,7 @@ export function HomeScreen({ db, update, go }) {
       )}
       {activeTab === 'Items' && (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 100 }}>
-          {db.loans.length === 0 ? <Empty text="No items yet." /> : db.loans.map((l) => {
+          {filteredLoansItems.length === 0 ? <Empty text="No items found." /> : filteredLoansItems.map((l) => {
             const cust = db.customers.find((c) => c.id === l.customerId) || {};
             const orns = l.ornaments || [{ desc: l.itemDesc || '-', weight: l.weight, purity: l.purity, metal: 'Gold' }];
             return orns.map((o, i) => (
@@ -398,6 +413,7 @@ const cname = (db, id) => (db.customers.find((c) => c.id === id) || {}).name || 
 export function Login({ db, update, onOk }) {
   const [pin, setPin] = useState(''); const [pin2, setPin2] = useState('');
   const first = !db.pin;
+  const pin2Ref = useRef();
   const go = async () => {
     if (!/^\d{4}$/.test(pin)) return notify('PIN must be 4 digits');
     if (first) { if (pin !== pin2) return notify('PINs do not match'); await update((d) => ({ ...d, pin })); onOk(); }
@@ -408,8 +424,11 @@ export function Login({ db, update, onOk }) {
       <Text style={{ fontSize: 64, textAlign: 'center', marginBottom: 4 }}>💍</Text>
       <Text style={{ color: '#B9C6D3', marginBottom: 30, textAlign: 'center' }}>Gold loan manager</Text>
       <Text style={{ color: '#fff', marginBottom: 8 }}>{first ? 'Create a 4-digit PIN' : 'Enter your PIN'}</Text>
-      <Field label="" value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry maxLength={4} placeholder="••••" />
-      {first ? <Field label="" value={pin2} onChangeText={setPin2} keyboardType="number-pad" secureTextEntry maxLength={4} placeholder="Confirm PIN" /> : null}
+      <Field label="" value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry maxLength={4} placeholder="••••"
+        returnKeyType="done"
+        onSubmitEditing={first ? () => pin2Ref.current?.focus() : go} />
+      {first ? <Field label="" value={pin2} onChangeText={setPin2} keyboardType="number-pad" secureTextEntry maxLength={4} placeholder="Confirm PIN"
+        ref={pin2Ref} returnKeyType="done" onSubmitEditing={go} /> : null}
       <Btn title={first ? 'Save PIN and continue' : 'Unlock'} onPress={go} style={{ backgroundColor: C.gold }} />
     </View>
   );
@@ -625,7 +644,7 @@ export function CustomerForm({ db, update, back, goNext }) {
 export function CustomerEdit({ db, update, back, id }) {
   const [pwVisible, setPwVisible] = useState(!db.editPassword);
   const [unlocked, setUnlocked] = useState(!db.editPassword);
-  const [deletePwVisible, setDeletePwVisible] = useState(false);
+  const [deletePinVisible, setDeletePinVisible] = useState(false);
   const cust = db.customers.find((c) => c.id === id);
   const [f, setF] = useState(cust ? { ...cust } : EMPTY_CUSTOMER);
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
@@ -643,19 +662,16 @@ export function CustomerEdit({ db, update, back, id }) {
       back();
     }, 'Delete');
   };
-  const requestDelete = () => {
-    if (db.editPassword) setDeletePwVisible(true);
-    else doDelete();
-  };
+  const requestDelete = () => setDeletePinVisible(true);
   if (!unlocked) return (
     <PasswordModal visible={!unlocked} storedPassword={db.editPassword}
       onOk={() => setUnlocked(true)} onCancel={back} title="Enter edit password to edit customer" />
   );
   return (
     <><Header title="Edit customer" onBack={back} />
-    <PasswordModal visible={deletePwVisible} storedPassword={db.editPassword}
-      onOk={() => { setDeletePwVisible(false); doDelete(); }}
-      onCancel={() => setDeletePwVisible(false)} title="Enter password to delete customer" />
+    <DeletePinModal visible={deletePinVisible}
+      onOk={() => { setDeletePinVisible(false); doDelete(); }}
+      onCancel={() => setDeletePinVisible(false)} />
     <Page>
       <Photo label="Customer photo" value={f.photo} onChange={set('photo')} />
       <Field label="Full name" value={f.name} onChangeText={set('name')} />
@@ -673,7 +689,7 @@ export function CustomerEdit({ db, update, back, id }) {
 /* ---------- Loans ---------- */
 export function Loans({ db, update, go }) {
   const [q, setQ] = useState(''); const [tab, setTab] = useState('active');
-  const [delPwVisible, setDelPwVisible] = useState(false);
+  const [delPinVisible, setDelPinVisible] = useState(false);
   const [pendingDelId, setPendingDelId] = useState(null);
   const list = db.loans.filter((l) => l.status === tab && (cname(db, l.customerId) + l.no).toLowerCase().includes(q.toLowerCase()));
 
@@ -686,16 +702,13 @@ export function Loans({ db, update, go }) {
       }));
     }, 'Delete');
   };
-  const requestDelete = (id) => {
-    if (db.editPassword) { setPendingDelId(id); setDelPwVisible(true); }
-    else doDelete(id);
-  };
+  const requestDelete = (id) => { setPendingDelId(id); setDelPinVisible(true); };
 
   return (
     <Page>
-      <PasswordModal visible={delPwVisible} storedPassword={db.editPassword}
-        onOk={() => { setDelPwVisible(false); doDelete(pendingDelId); }}
-        onCancel={() => setDelPwVisible(false)} title="Enter password to delete loan" />
+      <DeletePinModal visible={delPinVisible}
+        onOk={() => { setDelPinVisible(false); doDelete(pendingDelId); }}
+        onCancel={() => setDelPinVisible(false)} />
       <Field label="" value={q} onChangeText={setQ} placeholder="Search by customer or loan no." />
       <View style={{ flexDirection: 'row', marginBottom: 8 }}>
         {['active', 'closed'].map((t) => <Btn key={t} title={t === 'active' ? 'Active' : 'Closed'} kind={tab === t ? undefined : 'ghost'} onPress={() => setTab(t)} style={{ flex: 1, marginHorizontal: 3 }} />)}
@@ -899,10 +912,10 @@ const reportText = (db, l) => {
 
 /* ---------- Loan Detail with collection types ---------- */
 const COL_TYPES = [
-  { key: 'interest', label: 'Interest only' },
-  { key: 'partial', label: 'Partial capital' },
-  { key: 'capital', label: 'Capital amount' },
-  { key: 'settlement', label: 'Full settlement' },
+  { key: 'interest', label: 'Interest only',    hint: 'Pay interest charges only' },
+  { key: 'partial',  label: 'Partial capital',  hint: 'Pay part of the loan amount' },
+  { key: 'capital',  label: 'Capital amount',   hint: 'Pay full loan amount back' },
+  { key: 'settlement', label: 'Full settlement', hint: 'Close loan – pay everything' },
 ];
 
 export function LoanDetail({ db, update, id, back }) {
@@ -913,12 +926,25 @@ export function LoanDetail({ db, update, id, back }) {
   const [payMethod, setPayMethod] = useState('Cash');
   const [editDate, setEditDate] = useState('');
   const [pwVisible, setPwVisible] = useState(false);
+  const [delPwVisible, setDelPwVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState(null);
 
   if (!l) return null;
   const c = calc(l, db.payments);
   const pays = db.payments.filter((p) => p.loanId === id);
+
+  const doDelete = () => {
+    confirm('Delete this loan and all its payments?', async () => {
+      await update((d) => ({
+        ...d,
+        loans: d.loans.filter((x) => x.id !== id),
+        payments: d.payments.filter((p) => p.loanId !== id),
+      }));
+      back();
+    }, 'Delete');
+  };
+  const requestDelete = () => setDelPwVisible(true);
 
   const pay = async () => {
     const a = Number(amt); if (!a || a <= 0) return notify('Enter a valid amount');
@@ -961,6 +987,9 @@ export function LoanDetail({ db, update, id, back }) {
     <PasswordModal visible={pwVisible} storedPassword={db.editPassword}
       onOk={() => { setPwVisible(false); setEditFields({ ...l }); setEditMode(true); }}
       onCancel={() => setPwVisible(false)} />
+    <DeletePinModal visible={delPwVisible}
+      onOk={() => { setDelPwVisible(false); doDelete(); }}
+      onCancel={() => setDelPwVisible(false)} />
     <Page>
       {editMode && editFields ? (
         <Card>
@@ -1034,8 +1063,11 @@ export function LoanDetail({ db, update, id, back }) {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
             {COL_TYPES.map((t) => (
               <TouchableOpacity key={t.key} onPress={() => setColType(t.key)}
-                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, marginRight: 6, marginBottom: 6, backgroundColor: colType === t.key ? C.navy : '#fff', borderWidth: 1, borderColor: C.line }}>
-                <Text style={{ color: colType === t.key ? '#fff' : C.text, fontSize: 13 }}>{t.label}</Text>
+                style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginRight: 6, marginBottom: 6,
+                  backgroundColor: colType === t.key ? C.navy : '#fff', borderWidth: 1,
+                  borderColor: colType === t.key ? C.navy : C.line }}>
+                <Text style={{ color: colType === t.key ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{t.label}</Text>
+                <Text style={{ color: colType === t.key ? '#B9C6D3' : C.mute, fontSize: 11, marginTop: 2 }}>{t.hint}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1056,6 +1088,7 @@ export function LoanDetail({ db, update, id, back }) {
           <Btn title="Save collection" onPress={pay} />
           <Btn title="Send loan report" kind="ghost" onPress={() => Share.share({ message: reportText(db, l) }).catch(() => {})} />
           <Btn title="Close loan" kind="danger" onPress={close} />
+          <Btn title="Delete loan" kind="danger" onPress={requestDelete} />
         </>
       ) : <Chip text={`Closed on ${dmy(l.closedOn)}`} color={C.green} />}
 
@@ -1068,21 +1101,18 @@ export function LoanDetail({ db, update, id, back }) {
 }
 
 function PaymentRow({ p, db, update }) {
-  const [delPwVisible, setDelPwVisible] = useState(false);
+  const [delPinVisible, setDelPinVisible] = useState(false);
   const doDelete = () => {
     confirm('Delete this payment record?', async () => {
       await update((d) => ({ ...d, payments: d.payments.filter((x) => x.id !== p.id) }));
     }, 'Delete');
   };
-  const requestDelete = () => {
-    if (db.editPassword) setDelPwVisible(true);
-    else doDelete();
-  };
+  const requestDelete = () => setDelPinVisible(true);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderColor: C.line }}>
-      <PasswordModal visible={delPwVisible} storedPassword={db.editPassword}
-        onOk={() => { setDelPwVisible(false); doDelete(); }}
-        onCancel={() => setDelPwVisible(false)} title="Enter password to delete payment" />
+      <DeletePinModal visible={delPinVisible}
+        onOk={() => { setDelPinVisible(false); doDelete(); }}
+        onCancel={() => setDelPinVisible(false)} />
       <View style={{ flex: 1 }}>
         <Row a={`${dmy(p.date)} · ${p.colType || ''} · ${p.method || 'Cash'}${p.note ? ' · ' + p.note : ''}`} b={inr(p.amount)} />
       </View>
@@ -1124,7 +1154,6 @@ export function MemberSummary({ db, update, go }) {
               <TouchableOpacity onPress={() => go('loan', { id: l.id })} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: C.gold }}>
                 <Text style={{ color: C.gold, fontWeight: '700', fontSize: 12 }}>Edit</Text>
               </TouchableOpacity>
-              <StmtDeleteBtn loanId={l.id} db={db} update={update} />
             </View>
           </View>
           {cust.custNo ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600', marginBottom: 2 }}>{cust.custNo} · {l.no}</Text>
@@ -1175,9 +1204,18 @@ const REPORT_CATEGORIES = [
 ];
 
 export function ReportsMenu({ go }) {
+  const [q, setQ] = useState('');
+  const filteredCats = q
+    ? REPORT_CATEGORIES.map((cat) => ({ ...cat, items: cat.items.filter((item) => item.toLowerCase().includes(q.toLowerCase())) })).filter((cat) => cat.items.length > 0)
+    : REPORT_CATEGORIES;
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }}>
-      {REPORT_CATEGORIES.map((cat) => (
+    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: C.line, paddingHorizontal: 10, marginBottom: 12 }}>
+        <Text style={{ color: C.mute, fontSize: 16, marginRight: 6 }}>🔍</Text>
+        <TextInput value={q} onChangeText={setQ} placeholder="Search reports…" placeholderTextColor="#9AA7B4"
+          style={{ flex: 1, paddingVertical: 10, fontSize: 14, color: C.text }} />
+      </View>
+      {filteredCats.length === 0 ? <Empty text="No reports found." /> : filteredCats.map((cat) => (
         <View key={cat.title} style={{ marginBottom: 20 }}>
           <Text style={{ color: C.navy, fontWeight: '800', fontSize: 15, marginBottom: 8 }}>{cat.title}</Text>
           <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: C.line, overflow: 'hidden' }}>
@@ -1204,6 +1242,7 @@ export function CashflowReport({ db, back }) {
   const [range, setRange] = useState('This Month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [applied, setApplied] = useState({ range: 'This Month', from: '', to: '' });
   const [showRangeDropdown, setShowRangeDropdown] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showZeroTxns, setShowZeroTxns] = useState(false);
@@ -1212,24 +1251,30 @@ export function CashflowReport({ db, back }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQ, setSearchQ] = useState('');
 
+  const handleSearch = () => {
+    setApplied({ range, from: customFrom, to: customTo });
+    setShowRangeDropdown(false);
+  };
+
   const { fromDate, toDate } = useMemo(() => {
+    const r = applied.range, cf = applied.from, ct = applied.to;
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
     const pad = (n) => String(n).padStart(2, '0');
-    if (range === 'This Month') {
+    if (r === 'This Month') {
       return { fromDate: `${y}-${pad(m + 1)}-01`, toDate: `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}` };
-    } else if (range === 'Last Month') {
+    } else if (r === 'Last Month') {
       const lm = m === 0 ? 11 : m - 1, ly = m === 0 ? y - 1 : y;
       return { fromDate: `${ly}-${pad(lm + 1)}-01`, toDate: `${ly}-${pad(lm + 1)}-${pad(new Date(ly, lm + 1, 0).getDate())}` };
-    } else if (range === 'This Year') {
+    } else if (r === 'This Year') {
       return { fromDate: `${y}-01-01`, toDate: `${y}-12-31` };
-    } else if (range === 'Financial Year') {
+    } else if (r === 'Financial Year') {
       const fyStart = m >= 3 ? y : y - 1;
       return { fromDate: `${fyStart}-04-01`, toDate: `${fyStart + 1}-03-31` };
     } else {
-      return { fromDate: customFrom, toDate: customTo };
+      return { fromDate: cf, toDate: ct };
     }
-  }, [range, customFrom, customTo]);
+  }, [applied]);
 
   const pays = db.payments || [];
   const loans = db.loans || [];
@@ -1248,7 +1293,7 @@ export function CashflowReport({ db, back }) {
     return true;
   }), [pays, fromDate, toDate, showZeroTxns, searchQ]);
 
-  // Money In = all cash inflows (interest, capital, settlement, partial)
+  // Money In = all cash inflows (interest, capital, settlement, partial) (interest, capital, settlement, partial)
   const moneyInTxns = filtered.filter((p) => p.amount > 0);
   const moneyOutTxns = filtered.filter((p) => p.amount < 0);
   const totalMoneyIn = moneyInTxns.reduce((s, p) => s + p.amount, 0);
@@ -1281,8 +1326,8 @@ export function CashflowReport({ db, back }) {
   };
 
   const fmtRange = () => {
-    if (range !== 'Custom Range') return range;
-    if (customFrom && customTo) return `${dmy(customFrom)} – ${dmy(customTo)}`;
+    if (applied.range !== 'Custom Range') return applied.range;
+    if (applied.from && applied.to) return `${dmy(applied.from)} – ${dmy(applied.to)}`;
     return 'Custom Range';
   };
 
@@ -1365,6 +1410,11 @@ export function CashflowReport({ db, back }) {
               </View>
             </View>
           )}
+          <TouchableOpacity onPress={handleSearch}
+            style={{ marginTop: 8, backgroundColor: C.navy, borderRadius: 8, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15 }}>🔍</Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Search</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Filters Applied */}
@@ -1508,21 +1558,30 @@ export function SaleReport({ db, back, go }) {
   const [range, setRange] = useState('All Time');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [applied, setApplied] = useState({ range: 'All Time', from: '', to: '' });
   const [showRangeDropdown, setShowRangeDropdown] = useState(false);
   const [showZeroTxns, setShowZeroTxns] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+
+  const handleSearch = () => {
+    setApplied({ range, from: customFrom, to: customTo });
+    setShowRangeDropdown(false);
+  };
 
   const { fromDate, toDate } = useMemo(() => {
-    if (range === 'All Time') return { fromDate: '', toDate: '' };
+    const r = applied.range, cf = applied.from, ct = applied.to;
+    if (r === 'All Time') return { fromDate: '', toDate: '' };
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
     const pad = (n) => String(n).padStart(2, '0');
-    if (range === 'This Month') return { fromDate: `${y}-${pad(m+1)}-01`, toDate: `${y}-${pad(m+1)}-${pad(new Date(y,m+1,0).getDate())}` };
-    if (range === 'Last Month') { const lm = m===0?11:m-1, ly=m===0?y-1:y; return { fromDate:`${ly}-${pad(lm+1)}-01`, toDate:`${ly}-${pad(lm+1)}-${pad(new Date(ly,lm+1,0).getDate())}` }; }
-    if (range === 'This Year') return { fromDate:`${y}-01-01`, toDate:`${y}-12-31` };
-    if (range === 'Financial Year') { const fs=m>=3?y:y-1; return { fromDate:`${fs}-04-01`, toDate:`${fs+1}-03-31` }; }
-    return { fromDate: customFrom, toDate: customTo };
-  }, [range, customFrom, customTo]);
+    if (r === 'This Month') return { fromDate: `${y}-${pad(m+1)}-01`, toDate: `${y}-${pad(m+1)}-${pad(new Date(y,m+1,0).getDate())}` };
+    if (r === 'Last Month') { const lm = m===0?11:m-1, ly=m===0?y-1:y; return { fromDate:`${ly}-${pad(lm+1)}-01`, toDate:`${ly}-${pad(lm+1)}-${pad(new Date(ly,lm+1,0).getDate())}` }; }
+    if (r === 'This Year') return { fromDate:`${y}-01-01`, toDate:`${y}-12-31` };
+    if (r === 'Financial Year') { const fs=m>=3?y:y-1; return { fromDate:`${fs}-04-01`, toDate:`${fs+1}-03-31` }; }
+    return { fromDate: cf, toDate: ct };
+  }, [applied]);
 
   const pays = db.payments || [];
   const loans = db.loans || [];
@@ -1532,16 +1591,23 @@ export function SaleReport({ db, back, go }) {
     if (fromDate && p.date < fromDate) return false;
     if (toDate && p.date > toDate) return false;
     if (!showZeroTxns && p.amount === 0) return false;
+    if (searchQ) {
+      const loan = loans.find((l) => l.id === p.loanId) || {};
+      const cust = customers.find((c) => c.id === loan.customerId) || {};
+      if (!(cust.name || '').toLowerCase().includes(searchQ.toLowerCase()) &&
+          !(loan.no || '').toLowerCase().includes(searchQ.toLowerCase()) &&
+          !(p.colType || '').toLowerCase().includes(searchQ.toLowerCase())) return false;
+    }
     return true;
-  }), [pays, fromDate, toDate, showZeroTxns]);
+  }), [pays, fromDate, toDate, showZeroTxns, searchQ]);
 
   const totalSale = filtered.reduce((s, p) => s + p.amount, 0);
   const totalPaid = filtered.filter((p) => p.amount > 0).reduce((s, p) => s + p.amount, 0);
   const totalDue = filtered.filter((p) => p.amount < 0).reduce((s, p) => s + Math.abs(p.amount), 0);
 
   const fmtRange = () => {
-    if (range === 'Custom Range' && customFrom && customTo) return `${dmy(customFrom)} – ${dmy(customTo)}`;
-    return range;
+    if (applied.range === 'Custom Range' && applied.from && applied.to) return `${dmy(applied.from)} – ${dmy(applied.to)}`;
+    return applied.range;
   };
 
   return (
@@ -1551,7 +1617,18 @@ export function SaleReport({ db, back, go }) {
           <Text style={{ fontSize: 22, color: '#fff' }}>‹</Text>
         </TouchableOpacity>
         <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' }}>Sale Report</Text>
+        <TouchableOpacity onPress={() => { setShowSearch((v) => !v); setSearchQ(''); }} style={{ paddingHorizontal: 8 }}>
+          <Text style={{ fontSize: 18, opacity: showSearch ? 1 : 0.5 }}>🔍</Text>
+        </TouchableOpacity>
       </View>
+      {showSearch && (
+        <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.navy, borderBottomWidth: 1, borderColor: '#1C3A57' }}>
+          <TextInput value={searchQ} onChangeText={setSearchQ}
+            placeholder="Search by name, loan no, type…" placeholderTextColor="#9AA7B4"
+            style={{ backgroundColor: '#1C3A57', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#fff' }}
+            autoFocus />
+        </View>
+      )}
 
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
         {/* Date Filter */}
@@ -1599,6 +1676,11 @@ export function SaleReport({ db, back, go }) {
               </View>
             </View>
           )}
+          <TouchableOpacity onPress={handleSearch}
+            style={{ marginTop: 8, backgroundColor: C.navy, borderRadius: 8, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15 }}>🔍</Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Search</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Filters Applied */}
@@ -1694,6 +1776,7 @@ export function SaleDetail({ db, update, back, paymentId }) {
   const payment = (db.payments || []).find((p) => p.id === paymentId);
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState(null);
+  const [delPinVisible, setDelPinVisible] = useState(false);
 
   if (!payment) return (
     <View style={{ flex: 1 }}>
@@ -1855,7 +1938,10 @@ export function SaleDetail({ db, update, back, paymentId }) {
       {/* Bottom Action Buttons */}
       {!editMode && (
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 12, padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderColor: C.line }}>
-          <TouchableOpacity onPress={doDelete}
+          <DeletePinModal visible={delPinVisible}
+            onOk={() => { setDelPinVisible(false); doDelete(); }}
+            onCancel={() => setDelPinVisible(false)} />
+          <TouchableOpacity onPress={() => setDelPinVisible(true)}
             style={{ flex: 1, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: C.red }}>
             <Text style={{ color: C.red, fontWeight: '700', fontSize: 15 }}>Delete</Text>
           </TouchableOpacity>
@@ -1876,6 +1962,8 @@ export function DayBookReport({ db, back }) {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [filters, setFilters] = useState({ firm: 'All Firms', user: 'All Users', txnType: 'All Types', party: 'All Parties' });
   const [pendingFilters, setPendingFilters] = useState({ firm: 'All Firms', user: 'All Users', txnType: 'All Types', party: 'All Parties' });
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
 
   const pays = db.payments || [];
   const loans = db.loans || [];
@@ -1896,12 +1984,20 @@ export function DayBookReport({ db, back }) {
         const cust = customers.find((c) => c.id === loan.customerId) || {};
         if (cust.name !== filters.party) return false;
       }
+      if (searchQ) {
+        const loan = loans.find((l) => l.id === p.loanId) || {};
+        const cust = customers.find((c) => c.id === loan.customerId) || {};
+        if (!(cust.name || '').toLowerCase().includes(searchQ.toLowerCase()) &&
+            !(loan.no || '').toLowerCase().includes(searchQ.toLowerCase()) &&
+            !(p.colType || '').toLowerCase().includes(searchQ.toLowerCase())) return false;
+      }
       return true;
     });
-  }, [pays, fromDate, toDate, filters, loans, customers]);
+  }, [pays, fromDate, toDate, filters, loans, customers, searchQ]);
 
-  const totalDebit = records.reduce((s, p) => s + (p.amount < 0 ? Math.abs(p.amount) : 0), 0);
-  const totalCredit = records.reduce((s, p) => s + (p.amount > 0 ? p.amount : 0), 0);
+  const totalMoneyIn = records.reduce((s, p) => s + (p.amount > 0 ? p.amount : 0), 0);
+  const totalMoneyOut = records.reduce((s, p) => s + (p.amount < 0 ? Math.abs(p.amount) : 0), 0);
+  const totalAll = totalMoneyIn + totalMoneyOut;
 
   const activeChips = Object.entries(filters).filter(([, v]) => !v.startsWith('All'));
 
@@ -1913,20 +2009,59 @@ export function DayBookReport({ db, back }) {
 
   const exportPDF = async () => {
     const shopName = db.settings?.shopName || 'Kuber Jewellery';
-    const rows = records.map((p) => {
+    const rowsHtml = records.map((p) => {
       const loan = loans.find((l) => l.id === p.loanId) || {};
       const cust = customers.find((c) => c.id === loan.customerId) || {};
+      const custName = cust.name || '-';
       const debit = p.amount < 0 ? inr(Math.abs(p.amount)) : '-';
       const credit = p.amount > 0 ? inr(p.amount) : '-';
-      return `<tr><td>${dmy(p.date || today())}</td><td>${loan.no || '-'}</td><td>${p.colType || '-'}</td><td>${cust.name || '-'}</td><td style="color:#B93A2E">${debit}</td><td style="color:#1E8A58">${credit}</td></tr>`;
+      return `<tr><td>${dmy(p.date || today())}</td><td>${loan.no || '-'}</td><td>${p.colType || '-'}</td><td>${custName}</td><td style="color:#B93A2E">${debit}</td><td style="color:#1E8A58">${credit}</td></tr>`;
     }).join('');
     const dateLabel = fromDate === toDate ? dmy(fromDate) : `${dmy(fromDate)} – ${dmy(toDate)}`;
-    const html = `<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:16px}h2{color:#12263A}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#12263A;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #eee}.total{font-weight:bold;background:#f5f5f5}</style></head><body><h2>${shopName} – Day Book</h2><p style="color:#666">Date: ${dateLabel}</p><table><thead><tr><th>Date</th><th>Voucher</th><th>Type</th><th>Party</th><th>Debit</th><th>Credit</th></tr></thead><tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#999">No transactions</td></tr>'}</tbody><tfoot><tr class="total"><td colspan="4">Total</td><td style="color:#B93A2E">${inr(totalDebit)}</td><td style="color:#1E8A58">${inr(totalCredit)}</td></tr></tfoot></table></body></html>`;
+
+
+    const html = `<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:16px}h2{color:#12263A}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#12263A;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #eee}.total{font-weight:bold;background:#f5f5f5}.summary{display:flex;gap:12px;margin:12px 0}.box{flex:1;padding:10px;border:1px solid #eee;border-radius:8px;text-align:center}</style></head><body><h2>${shopName} – Day Book</h2><p style="color:#666">Date: ${dateLabel}</p><div class="summary"><div class="box"><div style="color:#666;font-size:11px">Total</div><div style="font-weight:bold">${inr(totalAll)}</div></div><div class="box"><div style="color:#666;font-size:11px">Money In</div><div style="color:#1E8A58;font-weight:bold">${inr(totalMoneyIn)}</div></div><div class="box"><div style="color:#666;font-size:11px">Money Out</div><div style="color:#B93A2E;font-weight:bold">${inr(totalMoneyOut)}</div></div></div><table><thead><tr><th>Date</th><th>Voucher</th><th>Type</th><th>Party</th><th>Debit</th><th>Credit</th></tr></thead><tbody>${rowsHtml || '<tr><td colspan="6" style="text-align:center;color:#999">No transactions</td></tr>'}</tbody><tfoot><tr class="total"><td colspan="3">Total (${records.length} txns)</td><td></td><td style="color:#B93A2E">${inr(totalMoneyOut)}</td><td style="color:#1E8A58">${inr(totalMoneyIn)}</td></tr></tfoot></table></body></html>`;
     if (Platform.OS === 'web') {
       const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print();
     } else {
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export PDF' });
+    }
+  };
+
+  const exportExcel = () => {
+    const shopName = db.settings?.shopName || 'Kuber Jewellery';
+    const dateLabel = fromDate === toDate ? dmy(fromDate) : `${dmy(fromDate)} – ${dmy(toDate)}`;
+    const wb = XLSX.utils.book_new();
+    const hdr = ['Date', 'Voucher No', 'Type', 'Party Name', 'Money Out (Debit)', 'Money In (Credit)'];
+    const data = records.map((p) => {
+      const loan = loans.find((l) => l.id === p.loanId) || {};
+      const cust = customers.find((c) => c.id === loan.customerId) || {};
+      return [
+        dmy(p.date || today()),
+        loan.no || '-',
+        p.colType || '-',
+        cust.name || '-',
+        p.amount < 0 ? Math.abs(p.amount) : 0,
+        p.amount > 0 ? p.amount : 0,
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([
+      [shopName + ' – Day Book'],
+      ['Date: ' + dateLabel],
+      ['Total: ' + inr(totalAll) + '  |  Money In: ' + inr(totalMoneyIn) + '  |  Money Out: ' + inr(totalMoneyOut)],
+      [],
+      hdr,
+      ...data,
+    ]);
+    ws['!cols'] = [{wch:12},{wch:18},{wch:14},{wch:22},{wch:16},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Day Book');
+    if (Platform.OS === 'web') { XLSX.writeFile(wb, 'day_book.xlsx'); }
+    else {
+      const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const path = FileSystem.cacheDirectory + 'day_book.xlsx';
+      FileSystem.writeAsStringAsync(path, wbout, { encoding: FileSystem.EncodingType.Base64 })
+        .then(() => Sharing.shareAsync(path, { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Export Excel' }));
     }
   };
 
@@ -1958,25 +2093,35 @@ export function DayBookReport({ db, back }) {
           <Text style={{ fontSize: 22, color: '#12263A' }}>‹</Text>
         </TouchableOpacity>
         <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: '#1B2733' }}>Day Book</Text>
+        <TouchableOpacity onPress={() => { setShowSearch((v) => !v); setSearchQ(''); }} style={{ paddingHorizontal: 8 }}>
+          <Text style={{ fontSize: 18, opacity: showSearch ? 1 : 0.5 }}>🔍</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={exportExcel} style={{ paddingHorizontal: 8 }}>
+          <Text style={{ fontSize: 18 }}>📥</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={exportPDF} style={{ paddingHorizontal: 8 }}>
           <Text style={{ fontSize: 18 }}>📄</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Date Selection */}
-      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#E8EDF2', paddingHorizontal: 14, paddingVertical: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <Text style={{ fontSize: 15 }}>📅</Text>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1B2733' }}>Select Date</Text>
+      {showSearch && (
+        <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#E8EDF2' }}>
+          <TextInput value={searchQ} onChangeText={setSearchQ}
+            placeholder="Search by name, loan no, type…" placeholderTextColor="#9AA7B4"
+            style={{ backgroundColor: '#F3F5F8', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: C.text }}
+            autoFocus />
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      )}
+
+      {/* Date Range Filter */}
+      <View style={{ backgroundColor: '#F7FAFF', borderBottomWidth: 1, borderColor: '#D6E8FF', paddingHorizontal: 14, paddingVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 8 }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>FROM</Text>
-            <CalendarPicker value={fromDate} onChange={(v) => { if (v) { setFromDate(v); if (v > toDate) setToDate(v); } }} label="From date" />
+            <Text style={{ fontSize: 11, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>FROM DATE</Text>
+            <CalendarPicker value={fromDate} onChange={(v) => { if (v) { setFromDate(v); if (!toDate || v > toDate) setToDate(v); } }} label="From date" />
           </View>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: '#6B7A8A', marginTop: 16 }}>→</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#6B7A8A', paddingBottom: 14 }}>→</Text>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>TO</Text>
+            <Text style={{ fontSize: 11, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>TO DATE</Text>
             <CalendarPicker value={toDate} onChange={(v) => { if (v) { setToDate(v); if (v < fromDate) setFromDate(v); } }} label="To date" />
           </View>
         </View>
@@ -2004,8 +2149,6 @@ export function DayBookReport({ db, back }) {
             ))}
           </View>
         )}
-
-        {/* Filter Panel */}
         {showFilterPanel && (
           <View style={{ marginTop: 12, backgroundColor: '#F7FAFF', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#D6E8FF' }}>
             <FilterOption label="Firm" field="firm" options={['All Firms']} value={pendingFilters.firm} />
@@ -2026,50 +2169,102 @@ export function DayBookReport({ db, back }) {
         )}
       </View>
 
-      {/* Main Content */}
-      <ScrollView style={{ flex: 1, backgroundColor: '#EAF4FF' }} contentContainerStyle={{ flexGrow: 1 }}>
+      {/* Three Summary Cards */}
+      <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#E8EDF2' }}>
+        <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14, borderRightWidth: 1, borderColor: '#E8EDF2' }}>
+          <Text style={{ fontSize: 11, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>TOTAL</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#12263A' }} numberOfLines={1} adjustsFontSizeToFit>{inr(totalAll)}</Text>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14, borderRightWidth: 1, borderColor: '#E8EDF2' }}>
+          <Text style={{ fontSize: 11, color: '#1E8A58', fontWeight: '600', marginBottom: 4 }}>MONEY IN</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E8A58' }} numberOfLines={1} adjustsFontSizeToFit>{inr(totalMoneyIn)}</Text>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', paddingVertical: 14 }}>
+          <Text style={{ fontSize: 11, color: '#B93A2E', fontWeight: '600', marginBottom: 4 }}>MONEY OUT</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: '#B93A2E' }} numberOfLines={1} adjustsFontSizeToFit>{inr(totalMoneyOut)}</Text>
+        </View>
+      </View>
+
+      {/* Transaction List */}
+      <ScrollView style={{ flex: 1, backgroundColor: '#EAF4FF' }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
         {records.length === 0 ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24 }}>
-            <View style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#D6E8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-              <Text style={{ fontSize: 40 }}>📋</Text>
+          <View>
+            {/* Sample entry card */}
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#D6E8FF', overflow: 'hidden' }}>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, paddingBottom: 10 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#1B2733' }}>Sample Customer</Text>
+                <View style={{ backgroundColor: '#EEF4FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, color: '#12263A', fontWeight: '600' }}>Interest</Text>
+                </View>
+              </View>
+              {/* Info row */}
+              <View style={{ flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12, gap: 20 }}>
+                <View>
+                  <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>DATE</Text>
+                  <Text style={{ fontSize: 12, color: '#1B2733', fontWeight: '600', marginTop: 2 }}>{dmy(fromDate || today())}</Text>
+                </View>
+                <View>
+                  <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>VOUCHER</Text>
+                  <Text style={{ fontSize: 12, color: '#1B2733', fontWeight: '600', marginTop: 2 }}>GL/25-26/A001</Text>
+                </View>
+              </View>
+              {/* Money In / Money Out columns */}
+              <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: '#E8EDF2' }}>
+                <View style={{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRightWidth: 1, borderColor: '#E8EDF2' }}>
+                  <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>MONEY IN</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#1E8A58' }}>₹5,000</Text>
+                </View>
+                <View style={{ flex: 1, alignItems: 'center', paddingVertical: 12 }}>
+                  <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600', marginBottom: 4 }}>MONEY OUT</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#B93A2E' }}>₹0</Text>
+                </View>
+              </View>
             </View>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1B2733', marginBottom: 10, textAlign: 'center' }}>No Data Available</Text>
-            <Text style={{ fontSize: 13, color: '#6B7A8A', textAlign: 'center', lineHeight: 20 }}>
-              No data is available for this report. Please try again after making relevant changes.
-            </Text>
+            <Text style={{ fontSize: 11, color: '#B8912F', textAlign: 'center', marginTop: 4, fontStyle: 'italic' }}>Sample entry — add real transactions to see them here.</Text>
           </View>
         ) : (
-          <View style={{ padding: 12 }}>
-            {/* Table Header */}
-            <View style={{ flexDirection: 'row', backgroundColor: '#12263A', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 6 }}>
-              <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: '#fff' }}>PARTY / TYPE</Text>
-              <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: '#fff', textAlign: 'center' }}>VOUCHER</Text>
-              <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: '#B93A2E', textAlign: 'right' }}>DEBIT</Text>
-              <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: '#1E8A58', textAlign: 'right' }}>CREDIT</Text>
-            </View>
-            {records.map((p) => {
-              const loan = loans.find((l) => l.id === p.loanId) || {};
-              const cust = customers.find((c) => c.id === loan.customerId) || {};
-              const txnType = p.colType ? (p.colType.charAt(0).toUpperCase() + p.colType.slice(1)) : 'Payment';
-              const isCredit = p.amount > 0;
-              return (
-                <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6, borderWidth: 1, borderColor: '#D6E8FF' }}>
-                  <View style={{ flex: 2 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#1B2733' }}>{cust.name || 'Unknown'}</Text>
-                    <Text style={{ fontSize: 11, color: '#6B7A8A', marginTop: 2 }}>{txnType}{p.method && p.method !== 'Cash' ? ' · ' + p.method : ''}</Text>
-                  </View>
-                  <Text style={{ flex: 1, fontSize: 12, color: '#6B7A8A', textAlign: 'center' }}>{loan.no || '-'}</Text>
-                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#B93A2E', textAlign: 'right' }}>{!isCredit ? inr(Math.abs(p.amount)) : '-'}</Text>
-                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#1E8A58', textAlign: 'right' }}>{isCredit ? inr(p.amount) : '-'}</Text>
+          records.map((p) => {
+            const loan = loans.find((l) => l.id === p.loanId) || {};
+            const cust = customers.find((c) => c.id === loan.customerId) || {};
+            const custName = cust.name || 'Unknown';
+            const txnType = p.colType ? (p.colType.charAt(0).toUpperCase() + p.colType.slice(1)) : 'Payment';
+            const isCredit = p.amount > 0;
+            return (
+              <View key={p.id} style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#D6E8FF' }}>
+                {/* Card Header: customer name + amount */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1B2733', flex: 1 }} numberOfLines={1}>{custName}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: isCredit ? '#1E8A58' : '#B93A2E' }}>{inr(Math.abs(p.amount))}</Text>
                 </View>
-              );
-            })}
-            {/* Totals */}
-            <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginTop: 4 }}>
-              <Text style={{ flex: 3, fontSize: 13, fontWeight: '700', color: '#12263A' }}>Total ({records.length} txn{records.length !== 1 ? 's' : ''})</Text>
-              <Text style={{ flex: 1, fontSize: 13, fontWeight: '800', color: '#B93A2E', textAlign: 'right' }}>{inr(totalDebit)}</Text>
-              <Text style={{ flex: 1, fontSize: 13, fontWeight: '800', color: '#1E8A58', textAlign: 'right' }}>{inr(totalCredit)}</Text>
-            </View>
+                {/* Card Details Row */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  <View>
+                    <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>DATE</Text>
+                    <Text style={{ fontSize: 12, color: '#1B2733', fontWeight: '600', marginTop: 2 }}>{dmy(p.date || today())}</Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>VOUCHER</Text>
+                    <Text style={{ fontSize: 12, color: '#1B2733', fontWeight: '600', marginTop: 2 }}>{loan.no || '-'}</Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>TYPE</Text>
+                    <Text style={{ fontSize: 12, color: '#1B2733', fontWeight: '600', marginTop: 2 }}>{txnType}{p.method && p.method !== 'Cash' ? ' · ' + p.method : ''}</Text>
+                  </View>
+                  <View style={{ marginLeft: 'auto', alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 10, color: '#6B7A8A', fontWeight: '600' }}>{isCredit ? 'MONEY IN' : 'MONEY OUT'}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: isCredit ? '#1E8A58' : '#B93A2E', marginTop: 2 }}>{inr(Math.abs(p.amount))}</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+        {records.length > 0 && (
+          <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginTop: 4, gap: 8 }}>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#12263A' }}>Total ({records.length} txn{records.length !== 1 ? 's' : ''})</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#B93A2E' }}>{inr(totalMoneyOut)}</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#1E8A58' }}>{inr(totalMoneyIn)}</Text>
           </View>
         )}
       </ScrollView>
@@ -2424,7 +2619,7 @@ export function Reports({ db, go }) {
 }
 
 function StmtDeleteBtn({ loanId, db, update }) {
-  const [delPwVisible, setDelPwVisible] = useState(false);
+  const [delPinVisible, setDelPinVisible] = useState(false);
   const doDelete = () => {
     confirm('Delete this loan and all its payments?', async () => {
       await update((d) => ({
@@ -2436,10 +2631,10 @@ function StmtDeleteBtn({ loanId, db, update }) {
   };
   return (
     <>
-      <PasswordModal visible={delPwVisible} storedPassword={db.editPassword}
-        onOk={() => { setDelPwVisible(false); doDelete(); }}
-        onCancel={() => setDelPwVisible(false)} title="Enter password to delete loan" />
-      <TouchableOpacity onPress={() => db.editPassword ? setDelPwVisible(true) : doDelete()}
+      <DeletePinModal visible={delPinVisible}
+        onOk={() => { setDelPinVisible(false); doDelete(); }}
+        onCancel={() => setDelPinVisible(false)} />
+      <TouchableOpacity onPress={() => setDelPinVisible(true)}
         style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: C.red }}>
         <Text style={{ color: C.red, fontWeight: '700', fontSize: 12 }}>Delete</Text>
       </TouchableOpacity>
@@ -2647,7 +2842,7 @@ export function CustomerProfile({ db, go, back, id }) {
                   {sigLoan ? (
                     <>
                       <View style={{ height: 110, borderRadius: 10, borderWidth: 1, borderColor: C.gold + '66', backgroundColor: '#FAFAFA', overflow: 'hidden' }}>
-                        <Svg height={110} width={320}>
+                        <Svg height={110} width="100%" viewBox="0 0 320 110" preserveAspectRatio="xMidYMid meet">
                           {sigLoan.signaturePaths.map((pts, i) => (
                             <Path key={i} d={toD(pts)} stroke={C.navy} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
                           ))}
@@ -2753,11 +2948,14 @@ export function CustomerProfile({ db, go, back, id }) {
 }
 
 /* ---------- Customer Wise Ledger ---------- */
-export function CustomerLedger({ db, back }) {
-  const [reportFormat, setReportFormat] = useState('excel'); // 'excel' | 'statement'
+export function CustomerLedger({ db, back, onMenuPress, go }) {
+  const [reportFormat, setReportFormat] = useState('excel'); // 'excel' | 'statement' | 'ledgerReport' | 'yearwiseKannada'
   const [showFormatDropdown, setShowFormatDropdown] = useState(false);
+  const [viewAllModal, setViewAllModal] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [appliedFrom, setAppliedFrom] = useState('');
+  const [appliedTo, setAppliedTo] = useState('');
   const [searchQ, setSearchQ] = useState('');
   // Individual statement state
   const [stmtCustQ, setStmtCustQ] = useState('');
@@ -2781,8 +2979,8 @@ export function CustomerLedger({ db, back }) {
       .map((c) => {
         const cLoans = loans.filter((l) => l.customerId === c.id);
         const filteredLoans = cLoans.filter((l) => {
-          if (fromDate && l.date < fromDate) return false;
-          if (toDate && l.date > toDate) return false;
+          if (appliedFrom && l.date < appliedFrom) return false;
+          if (appliedTo && l.date > appliedTo) return false;
           return true;
         });
         const totalDebit = filteredLoans.reduce((s, l) => s + l.principal, 0);
@@ -2821,7 +3019,7 @@ export function CustomerLedger({ db, back }) {
         };
       })
       .filter((r) => r.debit > 0 || r.received > 0);
-  }, [customers, loans, payments, fromDate, toDate, searchQ]);
+  }, [customers, loans, payments, appliedFrom, appliedTo, searchQ]);
 
   const exportExcel = () => {
     const shopName = (db.settings || {}).shopName || 'Kuber Jewellery';
@@ -2984,15 +3182,21 @@ export function CustomerLedger({ db, back }) {
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, backgroundColor: C.navy }}>
-        <TouchableOpacity onPress={back} style={{ paddingRight: 12 }}>
-          <Text style={{ fontSize: 22, color: '#fff' }}>‹</Text>
+        <TouchableOpacity onPress={onMenuPress} style={{ paddingRight: 12 }}>
+          <Text style={{ color: C.gold, fontSize: 22 }}>☰</Text>
         </TouchableOpacity>
         <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' }}>Customer Wise Ledger</Text>
         {reportFormat === 'excel' && (
-          <TouchableOpacity onPress={exportExcel}
-            style={{ backgroundColor: C.gold, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>📥 Export Excel</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity onPress={() => setViewAllModal(true)}
+              style={{ backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}>
+              <Text style={{ color: C.navy, fontWeight: '700', fontSize: 13 }}>👁 View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={exportExcel}
+              style={{ backgroundColor: C.gold, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>📥 Export Excel</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -3002,15 +3206,23 @@ export function CustomerLedger({ db, back }) {
         <TouchableOpacity onPress={() => setShowFormatDropdown((v) => !v)}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderWidth: 1, borderColor: '#D0DCF0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
           <Text style={{ fontSize: 14, color: C.text, fontWeight: '600' }}>
-            {reportFormat === 'excel' ? '📊  Customer Wise Ledger (Excel Format)' : '📄  Individual Customer Ledger (Statement Format)'}
+            {reportFormat === 'excel' ? '📊  Customer Wise Ledger (Excel Format)'
+              : reportFormat === 'statement' ? '📄  Individual Customer Ledger (Statement Format)'
+              : reportFormat === 'ledgerReport' ? '📋  Customer Ledger Report Format'
+              : '🇮🇳  ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ'}
           </Text>
           <Text style={{ color: C.mute, fontSize: 12 }}>▾</Text>
         </TouchableOpacity>
         {showFormatDropdown && (
           <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#D0DCF0', borderRadius: 8, marginTop: 4, overflow: 'hidden' }}>
-            {[['excel', '📊  Customer Wise Ledger (Excel Format)'], ['statement', '📄  Individual Customer Ledger (Statement Format)']].map(([k, label]) => (
+            {[
+              ['excel', '📊  Customer Wise Ledger (Excel Format)'],
+              ['statement', '📄  Individual Customer Ledger (Statement Format)'],
+              ['ledgerReport', '📋  Customer Ledger Report Format'],
+              ['yearwiseKannada', '🇮🇳  ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ'],
+            ].map(([k, label], idx, arr) => (
               <TouchableOpacity key={k} onPress={() => { setReportFormat(k); setShowFormatDropdown(false); }}
-                style={{ paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: k === 'excel' ? 1 : 0, borderColor: '#F0F4FA', backgroundColor: reportFormat === k ? '#EEF4FF' : '#fff' }}>
+                style={{ paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderColor: '#F0F4FA', backgroundColor: reportFormat === k ? '#EEF4FF' : '#fff' }}>
                 <Text style={{ fontSize: 14, color: reportFormat === k ? C.navy : C.text, fontWeight: reportFormat === k ? '700' : '400' }}>{label}</Text>
               </TouchableOpacity>
             ))}
@@ -3043,6 +3255,11 @@ export function CustomerLedger({ db, back }) {
                 <CalendarPicker value={toDate} onChange={setToDate} label="Select" />
               </View>
             </View>
+            <TouchableOpacity onPress={() => { setAppliedFrom(fromDate); setAppliedTo(toDate); }}
+              style={{ marginTop: 8, backgroundColor: C.navy, borderRadius: 8, paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 15 }}>🔍</Text>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Search</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Summary */}
@@ -3062,7 +3279,7 @@ export function CustomerLedger({ db, back }) {
 
           {/* Table */}
           <ScrollView style={{ flex: 1 }} horizontal>
-            <View>
+            <ScrollView>
               {/* Table Header */}
               <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
                 {[
@@ -3074,7 +3291,6 @@ export function CustomerLedger({ db, back }) {
                 ))}
               </View>
 
-              <ScrollView style={{ flex: 1 }}>
                 {rows.length === 0 ? (
                   <View style={{ paddingVertical: 40, alignItems: 'center', width: 1200 }}>
                     <Text style={{ color: C.mute, fontSize: 14 }}>No data found. Adjust filters.</Text>
@@ -3096,7 +3312,6 @@ export function CustomerLedger({ db, back }) {
                   </View>
                 ))}
               </ScrollView>
-            </View>
           </ScrollView>
         </>
       )}
@@ -3146,6 +3361,12 @@ export function CustomerLedger({ db, back }) {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Section 1: Customer Ledger Report Format */}
+      {reportFormat === 'ledgerReport' && <LedgerReportFormat db={db} />}
+
+      {/* Section 2: Year-wise Kannada Member Report */}
+      {reportFormat === 'yearwiseKannada' && <YearwiseKannadaReport db={db} />}
 
       {/* Statement Preview Modal */}
       <Modal visible={stmtPreview} animationType="slide" onRequestClose={() => setStmtPreview(false)}>
@@ -3252,6 +3473,76 @@ export function CustomerLedger({ db, back }) {
           )}
         </View>
       </Modal>
+
+      {/* View All Ledger Modal */}
+      <Modal visible={viewAllModal} animationType="slide" onRequestClose={() => setViewAllModal(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.navy, paddingHorizontal: 14, paddingVertical: 12 }}>
+            <TouchableOpacity onPress={() => setViewAllModal(false)} style={{ paddingRight: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 22 }}>‹</Text>
+            </TouchableOpacity>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#fff' }}>Customer Wise Ledger</Text>
+            <Text style={{ color: C.gold, fontSize: 13 }}>{rows.length} customers</Text>
+          </View>
+          <View style={{ flexDirection: 'row', backgroundColor: '#F7FAFF', borderBottomWidth: 1, borderColor: '#D6E8FF', paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
+            {[
+              { label: 'Total Debit', value: inr(rows.reduce((s, r) => s + r.debit, 0)), color: C.red },
+              { label: 'Total Received', value: inr(rows.reduce((s, r) => s + r.received, 0)), color: C.green },
+              { label: 'Net Amount', value: inr(rows.reduce((s, r) => s + r.netAmount, 0)), color: C.gold },
+            ].map((item) => (
+              <View key={item.label} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: '#E8EDF2' }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: item.color }} numberOfLines={1} adjustsFontSizeToFit>{item.value}</Text>
+                <Text style={{ fontSize: 10, color: C.mute, marginTop: 2 }}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+          <ScrollView horizontal>
+            <ScrollView>
+              <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
+                {[['SL',50],['CODE',80],['NAME',150],['ASSET',130],['PHONE',110],['AREA',130],['DEBIT',90],['DUE MONTH',110],['% DEBIT',70],['RECEIVED',90],['NET AMT',90],['INSTALL.',90]].map(([h,w]) => (
+                  <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
+                ))}
+              </View>
+                {rows.length === 0 ? (
+                  <View style={{ paddingVertical: 40, alignItems: 'center', width: 1200 }}>
+                    <Text style={{ color: C.mute }}>No data found.</Text>
+                  </View>
+                ) : rows.map((r, i) => (
+                  <View key={r.custNo + i} style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E8EDF2', backgroundColor: i % 2 === 0 ? '#fff' : '#F7FAFF', paddingVertical: 9 }}>
+                    <Text style={[cell, { width: 50 }]}>{i + 1}</Text>
+                    <Text style={[cell, { width: 80 }]}>{r.custNo}</Text>
+                    <Text style={[cell, { width: 150, fontWeight: '600' }]}>{r.name}</Text>
+                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.asset}</Text>
+                    <Text style={[cell, { width: 110 }]}>{r.phone}</Text>
+                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.area}</Text>
+                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '600' }]}>{inr(r.debit)}</Text>
+                    <Text style={[cell, { width: 110 }]} numberOfLines={2}>{r.dueMonth}</Text>
+                    <Text style={[cell, { width: 70 }]}>{r.pctDebit}%</Text>
+                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '600' }]}>{inr(r.received)}</Text>
+                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '700' }]}>{inr(r.netAmount)}</Text>
+                    <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
+                  </View>
+                ))}
+                {rows.length > 0 && (
+                  <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', paddingVertical: 10 }}>
+                    <Text style={[cell, { width: 50 }]} />
+                    <Text style={[cell, { width: 80 }]} />
+                    <Text style={[cell, { width: 150, fontWeight: '800', color: C.navy }]}>TOTAL</Text>
+                    <Text style={[cell, { width: 130 }]} />
+                    <Text style={[cell, { width: 110 }]} />
+                    <Text style={[cell, { width: 130 }]} />
+                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.debit,0))}</Text>
+                    <Text style={[cell, { width: 110 }]} />
+                    <Text style={[cell, { width: 70 }]} />
+                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.received,0))}</Text>
+                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.netAmount,0))}</Text>
+                    <Text style={[cell, { width: 90, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.installment,0))}</Text>
+                  </View>
+                )}
+              </ScrollView>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -3275,7 +3566,14 @@ const TxnHistoryRow = ({ p, db, accentColor }) => {
 };
 
 function TxnScreen({ title, icon, accentColor, formFields, onSave, back, history, db, totalLabel }) {
-  const total = history.reduce((s, p) => s + Math.abs(p.amount), 0);
+  const [histQ, setHistQ] = useState('');
+  const filteredHistory = history.filter((p) => {
+    if (!histQ) return true;
+    const loan = (db.loans || []).find((l) => l.id === p.loanId) || {};
+    const cust = (db.customers || []).find((c) => c.id === loan.customerId) || {};
+    return (cust.name + (loan.no || '') + (p.colType || '')).toLowerCase().includes(histQ.toLowerCase());
+  });
+  const total = filteredHistory.reduce((s, p) => s + Math.abs(p.amount), 0);
   return (
     <View style={{ flex: 1, backgroundColor: '#F3F5F8' }}>
       <Header title={title} onBack={back} />
@@ -3297,16 +3595,23 @@ function TxnScreen({ title, icon, accentColor, formFields, onSave, back, history
             <Text style={{ fontSize: 12, fontWeight: '700', color: C.navy, letterSpacing: 0.5 }}>RECENT {title.toUpperCase()}</Text>
             {history.length > 0 && <Text style={{ fontSize: 13, fontWeight: '700', color: accentColor }}>{totalLabel}: {inr(total)}</Text>}
           </View>
-          {history.length === 0
+          {history.length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: C.line, paddingHorizontal: 10, marginBottom: 8 }}>
+              <Text style={{ color: C.mute, fontSize: 15, marginRight: 6 }}>🔍</Text>
+              <TextInput value={histQ} onChangeText={setHistQ} placeholder="Search history…" placeholderTextColor="#9AA7B4"
+                style={{ flex: 1, paddingVertical: 8, fontSize: 13, color: C.text }} />
+            </View>
+          )}
+          {filteredHistory.length === 0
             ? <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: C.line }}>
-                <Text style={{ color: C.mute, fontSize: 14 }}>No records yet.</Text>
+                <Text style={{ color: C.mute, fontSize: 14 }}>{history.length === 0 ? 'No records yet.' : 'No results found.'}</Text>
               </View>
             : <View style={{ backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: C.line }}>
                 <View style={{ flexDirection: 'row', backgroundColor: accentColor, paddingVertical: 8, paddingHorizontal: 14 }}>
                   <Text style={{ flex: 1, color: '#fff', fontWeight: '700', fontSize: 11 }}>PARTY / DATE</Text>
                   <Text style={{ color: '#fff', fontWeight: '700', fontSize: 11 }}>AMOUNT</Text>
                 </View>
-                {history.map((p) => <TxnHistoryRow key={p.id} p={p} db={db} accentColor={accentColor} />)}
+                {filteredHistory.map((p) => <TxnHistoryRow key={p.id} p={p} db={db} accentColor={accentColor} />)}
               </View>
           }
         </View>
@@ -3708,6 +4013,29 @@ function TermsEditor({ db, update }) {
         </Text>
       </TouchableOpacity>
     </View>
+  );
+}
+
+export function TermsView({ db, back }) {
+  const terms = (db.settings || {}).termsAndConditions || DUMMY_TERMS;
+  return (
+    <Page>
+      <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: C.line, padding: 16, minHeight: 200 }}>
+        {terms.trim() ? terms.split('\n').map((line, i) => {
+          const isH = line.startsWith('##');
+          const isB = line.startsWith('-') || line.startsWith('•');
+          const text = line.replace(/^##\s*/, '').replace(/^[-•]\s*/, '');
+          if (!text.trim()) return <View key={i} style={{ height: 8 }} />;
+          return (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4 }}>
+              {isB && <Text style={{ color: C.gold, fontWeight: '700', marginRight: 7, marginTop: 2, fontSize: 14 }}>•</Text>}
+              <Text style={{ flex: 1, fontSize: isH ? 14 : 13, fontWeight: isH ? '800' : '400',
+                color: isH ? C.navy : C.text, marginTop: isH ? 10 : 0, lineHeight: 21 }}>{text}</Text>
+            </View>
+          );
+        }) : <Text style={{ color: C.mute, fontSize: 13 }}>No terms set yet.</Text>}
+      </View>
+    </Page>
   );
 }
 
