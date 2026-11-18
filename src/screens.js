@@ -724,9 +724,6 @@ export function Loans({ db, update, go }) {
               <TouchableOpacity onPress={() => go('loan', { id: l.id })} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: C.gold }}>
                 <Text style={{ color: C.gold, fontWeight: '700', fontSize: 12 }}>Edit</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => requestDelete(l.id)} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: C.red }}>
-                <Text style={{ color: C.red, fontWeight: '700', fontSize: 12 }}>Delete</Text>
-              </TouchableOpacity>
             </View>
           </View>
           {cust.custNo ? <Text style={{ color: C.gold, fontSize: 12, fontWeight: '600', marginBottom: 2 }}>{cust.custNo}</Text> : null}

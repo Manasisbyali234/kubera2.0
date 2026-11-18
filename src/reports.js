@@ -127,14 +127,14 @@ export function LedgerReportFormat({ db }) {
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>🖨 PDF</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView horizontal style={{ flex: 1 }}>
-        <View>
-          <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
-            {[['Date',90],['Name (Kannada)',160],['Interest',90],['Prev Month Bal',120],['Mobile',120],['Old Balance',100]].map(([h,w]) => (
-              <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
-            ))}
-          </View>
-          <ScrollView>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View>
+            <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
+              {[['Date',90],['Name (Kannada)',160],['Interest',90],['Prev Month Bal',120],['Mobile',120],['Old Balance',100]].map(([h,w]) => (
+                <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
+              ))}
+            </View>
             {rows.length === 0
               ? <View style={{ paddingVertical: 40, alignItems: 'center', width: 680 }}><Text style={{ color: C.mute }}>No records found.</Text></View>
               : rows.map((r, i) => (
@@ -158,9 +158,33 @@ export function LedgerReportFormat({ db }) {
                 <Text style={{ width: 100, fontSize: 12, fontWeight: '800', color: C.red, paddingHorizontal: 6, textAlign: 'right' }}>{inr(rows.reduce((s,r)=>s+r.oldBalance,0))}</Text>
               </View>
             )}
-          </ScrollView>
-        </View>
+          </View>
+        </ScrollView>
       </ScrollView>
+    </View>
+  );
+}
+
+/* ---- Loan detail table for YearwiseKannadaReport ---- */
+function LoanDetailTable({ l, name }) {
+  const rows = [
+    ['ಹೆಸರು (Name)',        name || '-',          '#12263A'],
+    ['ದಿನಾಂಕ (Date)',       dmy(l.loanDate),      '#12263A'],
+    ['ಸಂಖ್ಯೆ (Number)',     l.loanNo,             '#12263A'],
+    ['ಮೊತ್ತ (Amount)',      inr(l.principal),     '#12263A'],
+    ['ಬಡ್ಡಿ (Interest)',    inr(l.interest),      '#B8912F'],
+    ['ತಿಂಗಳ ಕಂತು (Due)',   l.dueDate ? dmy(l.dueDate) : '-', '#6B7A8A'],
+    ['ಹಳೆ ಬಾಕಿ (Old Bal)', inr(l.oldBalance),    '#B93A2E'],
+    ['ಹಿಂದಿನ ತಿಂಗಳ ಬಾಕಿ',  inr(l.yesterdayMonthBal), '#1E8A58'],
+  ];
+  return (
+    <View style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E8EDF2' }}>
+      {rows.map(([label, value, col], i) => (
+        <View key={label} style={{ flexDirection: 'row', backgroundColor: i % 2 === 0 ? '#F7FAFF' : '#fff', paddingVertical: 7, paddingHorizontal: 10 }}>
+          <Text style={{ flex: 1, fontSize: 11, color: '#6B7A8A' }}>{label}</Text>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: col }}>{value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -196,14 +220,24 @@ export function YearwiseKannadaReport({ db }) {
           const lPays = payments.filter((p) => p.loanId === l.id);
           const cv = calc(l, payments);
           const paid = lPays.reduce((s, p) => s + p.amount, 0);
+          // old balance = payments before loan date
           const prevPays = payments.filter((p) => p.loanId === l.id && (p.date || '') < (l.date || ''));
           const prevBal = prevPays.reduce((s, p) => s + p.amount, 0);
+          const oldBal = Math.max(0, l.principal - prevBal);
+          // yesterday month balance = payments before start of current month
+          const thisMonthStart = today().slice(0, 7) + '-01';
+          const prevMonthPays = payments.filter((p) => p.loanId === l.id && (p.date || '') < thisMonthStart);
+          const prevMonthPaid = prevMonthPays.reduce((s, p) => s + p.amount, 0);
+          const yesterdayMonthBal = Math.max(0, l.principal + Math.round(cv.interest) - prevMonthPaid);
           return {
             loanNo: l.no,
             loanDate: l.date || '',
             principal: l.principal,
             interest: Math.round(cv.interest),
+            dueDate: l.dueDate || '',
             prevBalance: Math.round(prevBal),
+            oldBalance: Math.round(oldBal),
+            yesterdayMonthBal: Math.round(yesterdayMonthBal),
             paid: Math.round(paid),
             pending: Math.round(cv.outstanding),
             status: l.status,
@@ -296,10 +330,67 @@ export function YearwiseKannadaReport({ db }) {
         </TouchableOpacity>
       </View>
 
-      {custRows.length === 0 && (
+      {custRows.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#6B7A8A', fontSize: 14 }}>No records for {selYear}.</Text>
         </View>
+      ) : (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+          {custRows.map((row) => (
+            <View key={row.c.id} style={{ marginBottom: 14, backgroundColor: '#fff', borderRadius: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, overflow: 'hidden' }}>
+              <View style={{ backgroundColor: '#12263A', paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#B8912F', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{(row.displayName || '?')[0].toUpperCase()}</Text>
+                  </View>
+                  <View>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{row.displayName}</Text>
+                    <Text style={{ color: '#B9C6D3', fontSize: 12, marginTop: 1 }}>{row.c.custNo || '-'} · {row.c.phone || '-'}</Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 15 }}>{inr(row.totLoan)}</Text>
+                  <Text style={{ color: '#B9C6D3', fontSize: 10 }}>ಸಾಲದ ಮೊತ್ತ</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#F0F4FA' }}>
+                {[['ಒಟ್ಟು ಬಡ್ಡಿ', inr(row.totInt), '#B8912F'], ['ಪಾವತಿಸಿದದು', inr(row.totPaid), '#1E8A58'], ['ಬಾಕಿ', inr(row.totPending), '#B93A2E']].map(([lbl, val, col], i) => (
+                  <View key={lbl} style={{ flex: 1, paddingVertical: 10, alignItems: 'center', borderRightWidth: i < 2 ? 1 : 0, borderColor: '#F0F4FA' }}>
+                    <Text style={{ color: col, fontWeight: '800', fontSize: 13 }}>{val}</Text>
+                    <Text style={{ color: '#6B7A8A', fontSize: 10, marginTop: 2 }}>{lbl}</Text>
+                  </View>
+                ))}
+              </View>
+              {row.loanDetails.map((l, li) => (
+                <View key={l.loanNo} style={{ paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: li < row.loanDetails.length - 1 ? 1 : 0, borderColor: '#F0F4FA', backgroundColor: li % 2 === 0 ? '#fff' : '#FAFBFF' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ backgroundColor: '#EEF4FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ color: '#12263A', fontWeight: '700', fontSize: 12 }}>{l.loanNo}</Text>
+                      </View>
+                      <Text style={{ color: '#6B7A8A', fontSize: 11 }}>{dmy(l.loanDate)}</Text>
+                    </View>
+                    <View style={{ backgroundColor: l.status === 'active' ? '#E6F9F0' : '#F5F5F5', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                      <Text style={{ color: l.status === 'active' ? '#1E8A58' : '#6B7A8A', fontSize: 11, fontWeight: '600' }}>
+                        {l.status === 'active' ? '● Active' : '✓ Closed'}
+                      </Text>
+                    </View>
+                  </View>
+                  <LoanDetailTable l={l} name={row.displayName} />
+                </View>
+              ))}
+            </View>
+          ))}
+          <View style={{ backgroundColor: '#12263A', borderRadius: 14, padding: 16, marginTop: 4 }}>
+            <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 15, marginBottom: 12 }}>{selYear} · Grand Total</Text>
+            {[['Total Loan Amount', inr(grandTotLoan), '#fff'], ['Total Interest', inr(grandTotInt), '#B8912F'], ['Total Paid', inr(grandTotPaid), '#1E8A58'], ['Total Pending', inr(grandTotPending), '#FF6B6B']].map(([lbl, val, col]) => (
+              <View key={lbl} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#ffffff22' }}>
+                <Text style={{ color: '#B9C6D3', fontSize: 13 }}>{lbl}</Text>
+                <Text style={{ color: col, fontWeight: '800', fontSize: 14 }}>{val}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       )}
 
       {/* Full-screen View Modal */}
@@ -383,20 +474,13 @@ export function YearwiseKannadaReport({ db }) {
                         </Text>
                       </View>
                     </View>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                      {[['Principal', inr(l.principal), '#12263A'], ['Interest', inr(l.interest), '#B8912F'], ['Prev Bal', inr(l.prevBalance), '#6B7A8A'], ['Paid', inr(l.paid), '#1E8A58'], ['Pending', inr(l.pending), '#B93A2E']].map(([k, v, col]) => (
-                        <View key={k} style={{ minWidth: 90, backgroundColor: '#F7FAFF', borderRadius: 8, padding: 8 }}>
-                          <Text style={{ color: '#9AA7B4', fontSize: 10, marginBottom: 2 }}>{k}</Text>
-                          <Text style={{ color: col, fontWeight: '700', fontSize: 13 }}>{v}</Text>
-                        </View>
-                      ))}
-                    </View>
+                    <LoanDetailTable l={l} name={row.displayName} />
                   </View>
                 ))}
               </View>
             ))}
 
-            {/* Grand Total Card */}
+            {/* Grand Total Card */
             <View style={{ backgroundColor: '#12263A', borderRadius: 14, padding: 16, marginTop: 4 }}>
               <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 15, marginBottom: 12 }}>{selYear} · Grand Total</Text>
               {[['Total Loan Amount', inr(grandTotLoan), '#fff'], ['Total Interest', inr(grandTotInt), '#B8912F'], ['Total Paid', inr(grandTotPaid), '#1E8A58'], ['Total Pending', inr(grandTotPending), '#FF6B6B']].map(([lbl, val, col]) => (
