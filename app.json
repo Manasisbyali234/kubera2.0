@@ -3,7 +3,7 @@
     "name": "Kuber Gold Loan",
     "slug": "kuber-gold-loan",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "platforms": [
       "android",
@@ -22,9 +22,10 @@
     "plugins": [
       "expo-asset"
     ],
+    "owner": "manasi72s-team",
     "extra": {
       "eas": {
-        "projectId": "17c24bc5-a5fb-45b7-b14e-189bd8719f1f"
+        "projectId": "1f743765-61c5-4dbc-9a73-c0ac784a5954"
       }
     }
   }

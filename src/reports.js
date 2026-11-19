@@ -480,7 +480,7 @@ export function YearwiseKannadaReport({ db }) {
               </View>
             ))}
 
-            {/* Grand Total Card */
+            {/* Grand Total Card */}
             <View style={{ backgroundColor: '#12263A', borderRadius: 14, padding: 16, marginTop: 4 }}>
               <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 15, marginBottom: 12 }}>{selYear} · Grand Total</Text>
               {[['Total Loan Amount', inr(grandTotLoan), '#fff'], ['Total Interest', inr(grandTotInt), '#B8912F'], ['Total Paid', inr(grandTotPaid), '#1E8A58'], ['Total Pending', inr(grandTotPending), '#FF6B6B']].map(([lbl, val, col]) => (

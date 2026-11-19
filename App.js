@@ -4,6 +4,7 @@ import { load, save } from './src/storage';
 import { C, Header, KHeader } from './src/ui';
 import * as S from './src/screens';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as Device from 'expo-device';
 
 const TABS = [
   ['home', '🏠  Home'],
@@ -23,11 +24,31 @@ export default function App() {
   const [ok, setOk] = useState(false);
   const [tab, setTab] = useState('home');
   const [sub, setSub] = useState(null);
-  const [landscape, setLandscape] = useState(false);
+  const [landscape, setLandscape] = useState(
+    Platform.OS === 'web' ? window.innerWidth >= 768 : false
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => { load().then(setDb); }, []);
+
+  // Auto-lock landscape on tablets only
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const onResize = () => setLandscape(window.innerWidth >= 768);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    ScreenOrientation.unlockAsync();
+    const sub = ScreenOrientation.addOrientationChangeListener((e) => {
+      const ori = e.orientationInfo.orientation;
+      setLandscape(ori === ScreenOrientation.Orientation.LANDSCAPE_LEFT || ori === ScreenOrientation.Orientation.LANDSCAPE_RIGHT);
+    });
+    ScreenOrientation.getOrientationAsync().then((ori) => {
+      setLandscape(ori === ScreenOrientation.Orientation.LANDSCAPE_LEFT || ori === ScreenOrientation.Orientation.LANDSCAPE_RIGHT);
+    });
+    return () => ScreenOrientation.removeOrientationChangeListener(sub);
+  }, []);
 
   // Hardware back — confirm exit when on root, go back when in sub-screen
   useEffect(() => {
@@ -193,23 +214,12 @@ export default function App() {
       </Modal>
     );
 
-    screen = landscape ? (
-      <View style={{ flex: 1, flexDirection: 'row' }}>
-        {sidebar}
-        <View style={{ flex: 1, backgroundColor: C.bg }}>
-          <View style={{ backgroundColor: C.navy, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', flex: 1 }}>{titles[tab]}</Text>
-            <TouchableOpacity onPress={toggleOrientation} style={{ paddingHorizontal: 10 }}>
-              <Text style={{ color: C.gold, fontSize: 18 }}>⊠</Text>
-            </TouchableOpacity>
-          </View>
-          {body[tab]}
-        </View>
-      </View>
-    ) : (
+    screen = (
       <View style={{ flex: 1 }}>
         {tab === 'home'
           ? <KHeader onMenuPress={() => setMenuOpen((v) => !v)} onRefreshPress={doRefresh} />
+          : tab === 'ledger'
+          ? null
           : <Header title={titles[tab]} onBack={backToHome} left={menuBtn} right={rotateBtn} />
         }
         {mobileMenu}
@@ -226,7 +236,7 @@ export default function App() {
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold }} />
         </View>
       )}
-      <View style={{ flex: 1, width: '100%', maxWidth: landscape ? 1400 : '100%', alignSelf: 'center' }}>
+      <View style={{ flex: 1, width: '100%' }}>
         {screen}
       </View>
 

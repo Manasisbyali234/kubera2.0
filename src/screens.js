@@ -87,12 +87,12 @@ export function HomeScreen({ db, update, go }) {
       </View>
 
       {/* Navigation Tabs */}
-      <View style={{ flexDirection: 'row', marginHorizontal: 10, marginTop: 10, marginBottom: 8, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: C.line, backgroundColor: '#fff' }}>
-        {TABS.map((tab) => (
+      <View style={{ flexDirection: 'row', marginHorizontal: 10, marginTop: 10, marginBottom: 8, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: C.line, backgroundColor: '#fff', height: 42 }}>
+        {TABS.map((tab, idx) => (
           <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)}
-            style={{ flex: 1, paddingVertical: 11, alignItems: 'center',
+            style={{ flex: 1, height: 42, alignItems: 'center', justifyContent: 'center',
               backgroundColor: activeTab === tab ? C.navy : '#fff',
-              borderRightWidth: tab !== 'Items' ? 1 : 0, borderColor: C.line }}>
+              borderRightWidth: idx < TABS.length - 1 ? 1 : 0, borderColor: C.line }}>
             <Text style={{ color: activeTab === tab ? '#fff' : C.text, fontWeight: activeTab === tab ? '700' : '500', fontSize: 14 }}>{tab}</Text>
           </TouchableOpacity>
         ))}
@@ -3179,10 +3179,13 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, backgroundColor: C.navy }}>
+        <TouchableOpacity onPress={back} style={{ paddingRight: 8 }}>
+          <Text style={{ color: '#fff', fontSize: 22 }}>‹</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={onMenuPress} style={{ paddingRight: 12 }}>
           <Text style={{ color: C.gold, fontSize: 22 }}>☰</Text>
         </TouchableOpacity>
-        <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' }}>Customer Wise Ledger</Text>
+        <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' }}>Customer Ledger</Text>
         {reportFormat === 'excel' && (
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity onPress={() => setViewAllModal(true)}
@@ -3360,10 +3363,10 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
       )}
 
       {/* Section 1: Customer Ledger Report Format */}
-      {reportFormat === 'ledgerReport' && <LedgerReportFormat db={db} />}
+      {reportFormat === 'ledgerReport' && <View style={{ flex: 1 }}><LedgerReportFormat db={db} /></View>}
 
       {/* Section 2: Year-wise Kannada Member Report */}
-      {reportFormat === 'yearwiseKannada' && <YearwiseKannadaReport db={db} />}
+      {reportFormat === 'yearwiseKannada' && <View style={{ flex: 1 }}><YearwiseKannadaReport db={db} /></View>}
 
       {/* Statement Preview Modal */}
       <Modal visible={stmtPreview} animationType="slide" onRequestClose={() => setStmtPreview(false)}>
@@ -3478,7 +3481,7 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
             <TouchableOpacity onPress={() => setViewAllModal(false)} style={{ paddingRight: 12 }}>
               <Text style={{ color: '#fff', fontSize: 22 }}>‹</Text>
             </TouchableOpacity>
-            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#fff' }}>Customer Wise Ledger</Text>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#fff' }}>Customer Ledger</Text>
             <Text style={{ color: C.gold, fontSize: 13 }}>{rows.length} customers</Text>
           </View>
           <View style={{ flexDirection: 'row', backgroundColor: '#F7FAFF', borderBottomWidth: 1, borderColor: '#D6E8FF', paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
@@ -3979,7 +3982,7 @@ function TermsEditor({ db, update }) {
             {[['##', 'Heading'], ['-', 'Bullet'], ['', 'Blank line']].map(([sym, lbl]) => (
               <View key={lbl} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#fff',
                 borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: C.line }}>
-                {sym ? <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 11, color: C.gold, fontWeight: '700' }}>{sym}</Text> : null}
+                {sym ? <Text style={{ fontFamily: 'Courier New', fontSize: 11, color: C.gold, fontWeight: '700' }}>{sym}</Text> : null}
                 <Text style={{ fontSize: 11, color: C.mute }}>{lbl}</Text>
               </View>
             ))}
@@ -3990,7 +3993,7 @@ function TermsEditor({ db, update }) {
             multiline
             style={{ padding: 14, fontSize: 13, color: C.text, minHeight: 260,
               textAlignVertical: 'top', lineHeight: 22,
-              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}
+              fontFamily: 'Courier New' }}
             placeholder="Type your terms here…"
             placeholderTextColor="#B0BAC5"
           />
