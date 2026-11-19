@@ -3233,7 +3233,7 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
 
       {/* Excel Format Filters */}
       {reportFormat === 'excel' && (
-        <>
+        <View style={{ flex: 1 }}>
           <View style={{ backgroundColor: '#F7FAFF', borderBottomWidth: 1, borderColor: '#D6E8FF', paddingHorizontal: 14, paddingVertical: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: C.line, paddingHorizontal: 10, marginBottom: 8 }}>
               <Text style={{ color: C.mute, fontSize: 15, marginRight: 6 }}>🔍</Text>
@@ -3278,8 +3278,7 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
           </View>
 
           {/* Table */}
-          <ScrollView style={{ flex: 1 }} horizontal>
-            <ScrollView>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ minWidth: 1160 }} keyboardShouldPersistTaps="handled">
               {/* Table Header */}
               <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
                 {[
@@ -3311,9 +3310,8 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
                     <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
                   </View>
                 ))}
-              </ScrollView>
           </ScrollView>
-        </>
+        </View>
       )}
 
       {/* Statement Format */}
@@ -3496,50 +3494,49 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
               </View>
             ))}
           </View>
-          <ScrollView horizontal>
-            <ScrollView>
-              <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
-                {[['SL',50],['CODE',80],['NAME',150],['ASSET',130],['PHONE',110],['AREA',130],['DEBIT',90],['DUE MONTH',110],['% DEBIT',70],['RECEIVED',90],['NET AMT',90],['INSTALL.',90]].map(([h,w]) => (
-                  <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
-                ))}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ minWidth: 1200 }} keyboardShouldPersistTaps="handled">
+            <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
+              {[['SL',50],['CODE',80],['NAME',150],['ASSET',130],['PHONE',110],['AREA',130],['DEBIT',90],['DUE MONTH',110],['% DEBIT',70],['RECEIVED',90],['NET AMT',90],['INSTALL.',90]].map(([h,w]) => (
+                <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
+              ))}
+            </View>
+            {rows.length === 0 ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <Text style={{ color: C.mute }}>No data found.</Text>
               </View>
-                {rows.length === 0 ? (
-                  <View style={{ paddingVertical: 40, alignItems: 'center', width: 1200 }}>
-                    <Text style={{ color: C.mute }}>No data found.</Text>
-                  </View>
-                ) : rows.map((r, i) => (
-                  <View key={r.custNo + i} style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E8EDF2', backgroundColor: i % 2 === 0 ? '#fff' : '#F7FAFF', paddingVertical: 9 }}>
-                    <Text style={[cell, { width: 50 }]}>{i + 1}</Text>
-                    <Text style={[cell, { width: 80 }]}>{r.custNo}</Text>
-                    <Text style={[cell, { width: 150, fontWeight: '600' }]}>{r.name}</Text>
-                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.asset}</Text>
-                    <Text style={[cell, { width: 110 }]}>{r.phone}</Text>
-                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.area}</Text>
-                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '600' }]}>{inr(r.debit)}</Text>
-                    <Text style={[cell, { width: 110 }]} numberOfLines={2}>{r.dueMonth}</Text>
-                    <Text style={[cell, { width: 70 }]}>{r.pctDebit}%</Text>
-                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '600' }]}>{inr(r.received)}</Text>
-                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '700' }]}>{inr(r.netAmount)}</Text>
-                    <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
-                  </View>
-                ))}
-                {rows.length > 0 && (
-                  <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', paddingVertical: 10 }}>
-                    <Text style={[cell, { width: 50 }]} />
-                    <Text style={[cell, { width: 80 }]} />
-                    <Text style={[cell, { width: 150, fontWeight: '800', color: C.navy }]}>TOTAL</Text>
-                    <Text style={[cell, { width: 130 }]} />
-                    <Text style={[cell, { width: 110 }]} />
-                    <Text style={[cell, { width: 130 }]} />
-                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.debit,0))}</Text>
-                    <Text style={[cell, { width: 110 }]} />
-                    <Text style={[cell, { width: 70 }]} />
-                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.received,0))}</Text>
-                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.netAmount,0))}</Text>
-                    <Text style={[cell, { width: 90, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.installment,0))}</Text>
-                  </View>
-                )}
-              </ScrollView>
+            ) : rows.map((r, i) => (
+              <View key={r.custNo + i} style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E8EDF2', backgroundColor: i % 2 === 0 ? '#fff' : '#F7FAFF', paddingVertical: 9 }}>
+                <Text style={[cell, { width: 50 }]}>{i + 1}</Text>
+                <Text style={[cell, { width: 80 }]}>{r.custNo}</Text>
+                <Text style={[cell, { width: 150, fontWeight: '600' }]}>{r.name}</Text>
+                <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.asset}</Text>
+                <Text style={[cell, { width: 110 }]}>{r.phone}</Text>
+                <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.area}</Text>
+                <Text style={[cell, { width: 90, color: C.red, fontWeight: '600' }]}>{inr(r.debit)}</Text>
+                <Text style={[cell, { width: 110 }]} numberOfLines={2}>{r.dueMonth}</Text>
+                <Text style={[cell, { width: 70 }]}>{r.pctDebit}%</Text>
+                <Text style={[cell, { width: 90, color: C.green, fontWeight: '600' }]}>{inr(r.received)}</Text>
+                <Text style={[cell, { width: 90, color: C.gold, fontWeight: '700' }]}>{inr(r.netAmount)}</Text>
+                <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
+              </View>
+            ))}
+            {rows.length > 0 && (
+              <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', paddingVertical: 10 }}>
+                <Text style={[cell, { width: 50 }]} />
+                <Text style={[cell, { width: 80 }]} />
+                <Text style={[cell, { width: 150, fontWeight: '800', color: C.navy }]}>TOTAL</Text>
+                <Text style={[cell, { width: 130 }]} />
+                <Text style={[cell, { width: 110 }]} />
+                <Text style={[cell, { width: 130 }]} />
+                <Text style={[cell, { width: 90, color: C.red, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.debit,0))}</Text>
+                <Text style={[cell, { width: 110 }]} />
+                <Text style={[cell, { width: 70 }]} />
+                <Text style={[cell, { width: 90, color: C.green, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.received,0))}</Text>
+                <Text style={[cell, { width: 90, color: C.gold, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.netAmount,0))}</Text>
+                <Text style={[cell, { width: 90, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.installment,0))}</Text>
+              </View>
+            )}
+            <View style={{ height: 40 }} />
           </ScrollView>
         </View>
       </Modal>

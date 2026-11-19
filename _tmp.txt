@@ -1,0 +1,379 @@
+ify('Enter a valid amount');
+    const loan = db.loans.find((l) => l.customerId === custId && l.status === 'active');
+    if (!loan) return notify('No active loan for this party');
+    await update((d) => ({ ...d, cashInHand: (d.cashInHand || 0) + (method === 'Cash' ? a : 0), payments: [{ id: uid(), loanId: loan.id, amount: a, note: note || 'Payment In', date: date || today(), colType: 'capital', method }, ...d.payments] }));
+    notify('Payment-In saved'); back();
+  };
+  return (
+    <TxnScreen title="Payment-In" icon="💵" accentColor="#1E8A58" back={back} onSave={save} history={history} db={db} totalLabel="Total In"
+      formFields={<>
+        <PartySearch custQ={custQ} setCustQ={setCustQ} custId={custId} setCustId={setCustId} db={db} />
+        <Field label="Amount (\u20b9)" value={amount} onChangeText={setAmount} keyboardType="number-pad" />
+        <MethodPicker method={method} setMethod={setMethod} accentColor="#1E8A58" />
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+        <CalendarPicker value={date} onChange={setDate} label="Select date" />
+        <Field label="Note (optional)" value={note} onChangeText={setNote} />
+      </>}
+    />
+  );
+}
+
+export function PurchaseScreen({ db, update, back }) {
+  const [custQ, setCustQ] = useState('');
+  const [custId, setCustId] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today());
+  const [note, setNote] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const history = (db.payments || []).filter((p) => p.colType === 'purchase').slice(0, 30);
+  const save = async () => {
+    if (!custId) return notify('Select a party');
+    const a = Number(amount); if (!a || a <= 0) return notify('Enter a valid amount');
+    const loan = db.loans.find((l) => l.customerId === custId && l.status === 'active');
+    if (!loan) return notify('No active loan for this party');
+    await update((d) => ({ ...d, payments: [{ id: uid(), loanId: loan.id, amount: -a, note: note || 'Purchase', date: date || today(), colType: 'purchase', method }, ...d.payments] }));
+    notify('Purchase saved'); back();
+  };
+  return (
+    <TxnScreen title="Purchase" icon="🛒" accentColor="#1E8A58" back={back} onSave={save} history={history} db={db} totalLabel="Total"
+      formFields={<>
+        <PartySearch custQ={custQ} setCustQ={setCustQ} custId={custId} setCustId={setCustId} db={db} />
+        <Field label="Amount (\u20b9)" value={amount} onChangeText={setAmount} keyboardType="number-pad" />
+        <MethodPicker method={method} setMethod={setMethod} accentColor="#1E8A58" />
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+        <CalendarPicker value={date} onChange={setDate} label="Select date" />
+        <Field label="Note (optional)" value={note} onChangeText={setNote} />
+      </>}
+    />
+  );
+}
+
+export function PaymentOutScreen({ db, update, back }) {
+  const [custQ, setCustQ] = useState('');
+  const [custId, setCustId] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today());
+  const [note, setNote] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const history = (db.payments || []).filter((p) => p.colType === 'paymentOut').slice(0, 30);
+  const save = async () => {
+    if (!custId) return notify('Select a party');
+    const a = Number(amount); if (!a || a <= 0) return notify('Enter a valid amount');
+    const loan = db.loans.find((l) => l.customerId === custId && l.status === 'active');
+    if (!loan) return notify('No active loan for this party');
+    await update((d) => ({ ...d, cashInHand: (d.cashInHand || 0) - (method === 'Cash' ? a : 0), payments: [{ id: uid(), loanId: loan.id, amount: -a, note: note || 'Payment Out', date: date || today(), colType: 'paymentOut', method }, ...d.payments] }));
+    notify('Payment-Out saved'); back();
+  };
+  return (
+    <TxnScreen title="Payment-Out" icon="💸" accentColor="#B93A2E" back={back} onSave={save} history={history} db={db} totalLabel="Total Out"
+      formFields={<>
+        <PartySearch custQ={custQ} setCustQ={setCustQ} custId={custId} setCustId={setCustId} db={db} />
+        <Field label="Amount (\u20b9)" value={amount} onChangeText={setAmount} keyboardType="number-pad" />
+        <MethodPicker method={method} setMethod={setMethod} accentColor="#B93A2E" />
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+        <CalendarPicker value={date} onChange={setDate} label="Select date" />
+        <Field label="Note (optional)" value={note} onChangeText={setNote} />
+      </>}
+    />
+  );
+}
+
+export function ExpensesScreen({ db, update, back }) {
+  const [category, setCategory] = useState('');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today());
+  const [note, setNote] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const CATEGORIES = ['Rent', 'Salary', 'Utilities', 'Maintenance', 'Other'];
+  const history = (db.payments || []).filter((p) => p.colType === 'expense').slice(0, 30);
+  const save = async () => {
+    const a = Number(amount); if (!a || a <= 0) return notify('Enter a valid amount');
+    if (!category) return notify('Select a category');
+    await update((d) => ({ ...d, cashInHand: (d.cashInHand || 0) - (method === 'Cash' ? a : 0), payments: [{ id: uid(), loanId: null, amount: -a, note: note || category, date: date || today(), colType: 'expense', method }, ...d.payments] }));
+    notify('Expense saved'); back();
+  };
+  return (
+    <TxnScreen title="Expenses" icon="💳" accentColor="#B8912F" back={back} onSave={save} history={history} db={db} totalLabel="Total Spent"
+      formFields={<>
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Category</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity key={cat} onPress={() => setCategory(cat)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: category === cat ? '#B8912F' : C.line, backgroundColor: category === cat ? '#B8912F' : '#fff' }}>
+              <Text style={{ color: category === cat ? '#fff' : C.text, fontWeight: '600', fontSize: 13 }}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Field label="Amount (\u20b9)" value={amount} onChangeText={setAmount} keyboardType="number-pad" />
+        <MethodPicker method={method} setMethod={setMethod} accentColor="#B8912F" />
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+        <CalendarPicker value={date} onChange={setDate} label="Select date" />
+        <Field label="Note (optional)" value={note} onChangeText={setNote} />
+      </>}
+    />
+  );
+}
+
+export function OtherIncomeScreen({ db, update, back }) {
+  const [source, setSource] = useState('');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today());
+  const [note, setNote] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const history = (db.payments || []).filter((p) => p.colType === 'otherIncome').slice(0, 30);
+  const save = async () => {
+    const a = Number(amount); if (!a || a <= 0) return notify('Enter a valid amount');
+    await update((d) => ({ ...d, cashInHand: (d.cashInHand || 0) + (method === 'Cash' ? a : 0), payments: [{ id: uid(), loanId: null, amount: a, note: note || source || 'Other Income', date: date || today(), colType: 'otherIncome', method }, ...d.payments] }));
+    notify('Other Income saved'); back();
+  };
+  return (
+    <TxnScreen title="Other Income" icon="💰" accentColor="#B8912F" back={back} onSave={save} history={history} db={db} totalLabel="Total Income"
+      formFields={<>
+        <Field label="Source / Description" value={source} onChangeText={setSource} placeholder="e.g. Commission, Interest" />
+        <Field label="Amount (\u20b9)" value={amount} onChangeText={setAmount} keyboardType="number-pad" />
+        <MethodPicker method={method} setMethod={setMethod} accentColor="#B8912F" />
+        <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+        <CalendarPicker value={date} onChange={setDate} label="Select date" />
+        <Field label="Note (optional)" value={note} onChangeText={setNote} />
+      </>}
+    />
+  );
+}
+
+/* Coming-soon screens */
+function ComingSoonScreen({ title, icon, back }) {
+  return (
+    <><Header title={title} onBack={back} />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <Text style={{ fontSize: 56, marginBottom: 16 }}>{icon}</Text>
+      <Text style={{ fontSize: 20, fontWeight: '800', color: C.navy, marginBottom: 8 }}>{title}</Text>
+      <Text style={{ fontSize: 14, color: C.mute, textAlign: 'center', lineHeight: 22 }}>{'This feature is coming soon.\nStay tuned for updates!'}</Text>
+    </View></>
+  );
+}
+
+export function SaleReturnScreen({ back }) { return <ComingSoonScreen title="Dr. Note / Sale Return" icon="↩️" back={back} />; }
+export function SaleOrderScreen({ back }) { return <ComingSoonScreen title="Sale Order" icon="📋" back={back} />; }
+export function EstimateScreen({ back }) { return <ComingSoonScreen title="Estimate / Quotation" icon="\ud83d\udcdd" back={back} />; }
+export function MobilePOSScreen({ back }) { return <ComingSoonScreen title="Mobile POS" icon="\ud83d\udcf1" back={back} />; }
+export function PurchaseReturnScreen({ back }) { return <ComingSoonScreen title="Dr. Note / Purchase Return" icon="\u21a9\ufe0f" back={back} />; }
+export function PurchaseOrderScreen({ back }) { return <ComingSoonScreen title="Purchase Order" icon="\ud83d\udce6" back={back} />; }
+export function PartyTransferScreen({ back }) { return <ComingSoonScreen title="Party To Party Transfer" icon="\ud83d\udd04" back={back} />; }
+
+/* ---------- Settings ---------- */
+export function Profile({ db, update, back }) {
+  const cfg = db.settings || {};
+  const [shopName, setShopName] = useState(cfg.shopName || 'Kuber Jewellery');
+  const [defRate, setDefRate] = useState(cfg.defaultRate || '2');
+  const [defMonths, setDefMonths] = useState(cfg.defaultMonths || '6');
+  const [defMode, setDefMode] = useState(cfg.defaultInterestMode || 'day');
+  const [oldPin, setOldPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [editPw, setEditPw] = useState(db.editPassword || '');
+  const [saved, setSaved] = useState('');
+
+  const saveSettings = async () => {
+    await update((d) => ({ ...d, settings: { ...(d.settings || {}), shopName: shopName.trim() || 'Kuber Jewellery', defaultRate: defRate, defaultMonths: defMonths, defaultInterestMode: defMode } }));
+    setSaved('settings');
+  };
+  const savePin = async () => {
+    if (db.pin && oldPin !== db.pin) return notify('Current PIN is wrong');
+    if (!/^\d{4}$/.test(newPin)) return notify('New PIN must be 4 digits');
+    await update((d) => ({ ...d, pin: newPin }));
+    setOldPin(''); setNewPin(''); setSaved('pin');
+  };
+  const saveEditPw = async () => {
+    await update((d) => ({ ...d, editPassword: editPw.trim() || null }));
+    setSaved('pw');
+  };
+
+  const Section = ({ title }) => (
+    <Text style={{ fontWeight: '700', fontSize: 15, marginTop: 20, marginBottom: 8, color: C.navy }}>{title}</Text>
+  );
+
+  return (
+    <Page>
+      <Section title="Shop" />
+      <Field label="Shop name" value={shopName} onChangeText={setShopName} />
+
+      <Section title="Loan defaults" />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}><Field label="Interest rate (% / month)" value={defRate} onChangeText={setDefRate} keyboardType="decimal-pad" /></View>
+        <View style={{ flex: 1 }}><Field label="Tenure (months)" value={defMonths} onChangeText={setDefMonths} keyboardType="number-pad" /></View>
+      </View>
+      <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Default interest calculation</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+        {[['day', 'Day-wise'], ['month', 'Month-wise']].map(([k, label]) => (
+          <TouchableOpacity key={k} onPress={() => setDefMode(k)}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1,
+              borderColor: defMode === k ? C.navy : C.line, backgroundColor: defMode === k ? C.navy : '#fff' }}>
+            <Text style={{ color: defMode === k ? '#fff' : C.text, fontWeight: '600', fontSize: 13 }}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Btn title="Save settings" onPress={saveSettings} />
+      {saved === 'settings' && <Text style={{ color: C.green, textAlign: 'center', marginBottom: 4 }}>Saved ✓</Text>}
+
+      <Section title="Security" />
+      {db.pin ? <Field label="Current PIN" value={oldPin} onChangeText={setOldPin} secureTextEntry keyboardType="number-pad" maxLength={4} /> : null}
+      <Field label="New PIN (4 digits)" value={newPin} onChangeText={setNewPin} secureTextEntry keyboardType="number-pad" maxLength={4} />
+      <Btn title="Save PIN" onPress={savePin} />
+      {saved === 'pin' && <Text style={{ color: C.green, textAlign: 'center', marginBottom: 4 }}>Saved ✓</Text>}
+
+      <Text style={{ color: C.mute, fontSize: 12, marginTop: 16, marginBottom: 4 }}>Edit password — required before editing any loan or customer. Leave blank to disable.</Text>
+      <Field label="Edit password" value={editPw} onChangeText={setEditPw} secureTextEntry />
+      <Btn title="Save edit password" onPress={saveEditPw} />
+      {saved === 'pw' && <Text style={{ color: C.green, textAlign: 'center', marginBottom: 4 }}>Saved ✓</Text>}
+
+      <TermsEditor db={db} update={update} />
+    </Page>
+  );
+}
+
+function TermsEditor({ db, update }) {
+  const [terms, setTerms] = useState((db.settings || {}).termsAndConditions || DUMMY_TERMS);
+  const [saved, setSaved] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  const save = async () => {
+    await update((d) => ({ ...d, settings: { ...(d.settings || {}), termsAndConditions: terms } }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <View style={{ marginTop: 24 }}>
+      {/* Section header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ width: 4, height: 20, borderRadius: 2, backgroundColor: C.gold }} />
+          <Text style={{ fontWeight: '800', fontSize: 16, color: C.navy }}>Terms & Conditions</Text>
+        </View>
+        <TouchableOpacity onPress={() => setPreview((v) => !v)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5,
+            borderRadius: 8, borderWidth: 1, borderColor: preview ? C.navy : C.line,
+            backgroundColor: preview ? C.navy : '#fff' }}>
+          <Text style={{ fontSize: 13, color: preview ? '#fff' : C.mute, fontWeight: '600' }}>
+            {preview ? '✏️ Edit' : '👁 Preview'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {preview ? (
+        /* ── Preview panel ── */
+        <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: C.line, padding: 16, minHeight: 200 }}>
+          {terms.trim() ? terms.split('\n').map((line, i) => {
+            const isH = line.startsWith('##');
+            const isB = line.startsWith('-') || line.startsWith('•');
+            const text = line.replace(/^##\s*/, '').replace(/^[-•]\s*/, '');
+            if (!text.trim()) return <View key={i} style={{ height: 8 }} />;
+            return (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: isH ? 4 : 4 }}>
+                {isB && <Text style={{ color: C.gold, fontWeight: '700', marginRight: 7, marginTop: 2, fontSize: 14 }}>•</Text>}
+                <Text style={{ flex: 1, fontSize: isH ? 14 : 13, fontWeight: isH ? '800' : '400',
+                  color: isH ? C.navy : C.text, marginTop: isH ? 10 : 0, lineHeight: 21 }}>{text}</Text>
+              </View>
+            );
+          }) : <Text style={{ color: C.mute, fontSize: 13 }}>Nothing to preview yet.</Text>}
+        </View>
+      ) : (
+        /* ── Editor panel ── */
+        <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: C.line, overflow: 'hidden' }}>
+          {/* Toolbar hint */}
+          <View style={{ flexDirection: 'row', gap: 6, padding: 10, borderBottomWidth: 1, borderColor: C.line, backgroundColor: '#F7FAFF' }}>
+            {[['##', 'Heading'], ['-', 'Bullet'], ['', 'Blank line']].map(([sym, lbl]) => (
+              <View key={lbl} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#fff',
+                borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: C.line }}>
+                {sym ? <Text style={{ fontFamily: 'Courier New', fontSize: 11, color: C.gold, fontWeight: '700' }}>{sym}</Text> : null}
+                <Text style={{ fontSize: 11, color: C.mute }}>{lbl}</Text>
+              </View>
+            ))}
+          </View>
+          <TextInput
+            value={terms}
+            onChangeText={setTerms}
+            multiline
+            style={{ padding: 14, fontSize: 13, color: C.text, minHeight: 260,
+              textAlignVertical: 'top', lineHeight: 22,
+              fontFamily: 'Courier New' }}
+            placeholder="Type your terms here…"
+            placeholderTextColor="#B0BAC5"
+          />
+          {/* Footer: char count */}
+          <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: 1, borderColor: C.line, backgroundColor: '#F7FAFF', alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 11, color: C.mute }}>{terms.length} characters</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Save button */}
+      <TouchableOpacity onPress={save}
+        style={{ marginTop: 12, backgroundColor: saved ? C.green : C.navy, borderRadius: 10,
+          paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+          {saved ? '✓  Saved!' : '💾  Save Terms & Conditions'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export function TermsView({ db, back }) {
+  const terms = (db.settings || {}).termsAndConditions || DUMMY_TERMS;
+  return (
+    <Page>
+      <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: C.line, padding: 16, minHeight: 200 }}>
+        {terms.trim() ? terms.split('\n').map((line, i) => {
+          const isH = line.startsWith('##');
+          const isB = line.startsWith('-') || line.startsWith('•');
+          const text = line.replace(/^##\s*/, '').replace(/^[-•]\s*/, '');
+          if (!text.trim()) return <View key={i} style={{ height: 8 }} />;
+          return (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4 }}>
+              {isB && <Text style={{ color: C.gold, fontWeight: '700', marginRight: 7, marginTop: 2, fontSize: 14 }}>•</Text>}
+              <Text style={{ flex: 1, fontSize: isH ? 14 : 13, fontWeight: isH ? '800' : '400',
+                color: isH ? C.navy : C.text, marginTop: isH ? 10 : 0, lineHeight: 21 }}>{text}</Text>
+            </View>
+          );
+        }) : <Text style={{ color: C.mute, fontSize: 13 }}>No terms set yet.</Text>}
+      </View>
+    </Page>
+  );
+}
+
+const DUMMY_TERMS = `## Kuber Gold Loan – Terms & Conditions
+
+## 1. Loan Agreement
+- The borrower agrees to pledge gold ornaments as collateral for the loan amount sanctioned.
+- The loan amount is determined based on the purity, weight, and current market value of the pledged gold.
+- All ornaments will be safely stored in our secured vault during the loan tenure.
+
+## 2. Interest & Repayment
+- Interest is charged at the agreed rate per month on the outstanding principal.
+- Interest must be paid on or before the due date each month to avoid penalties.
+- Partial or full repayment of principal is accepted at any time during the loan tenure.
+
+## 3. Loan Tenure & Renewal
+- The standard loan tenure is as agreed at the time of disbursement.
+- Loans may be renewed upon mutual agreement before the due date.
+- Failure to repay or renew within the tenure may result in auction of pledged gold as per applicable law.
+
+## 4. Auction Notice
+- A minimum of 14 days written notice will be provided before any auction proceedings.
+- Any surplus amount after auction and recovery of dues will be returned to the borrower.
+
+## 5. Customer Obligations
+- The borrower must ensure the gold pledged is their own property and free from disputes.
+- Valid government-issued ID proof is mandatory for all loan transactions.
+- Any change in contact details must be communicated to us immediately.
+
+## 6. Privacy
+- Customer information is stored securely and will not be shared with third parties.
+- Data is used solely for loan management and communication purposes.
+
+## 7. Governing Law
+- These terms are governed by the laws of India and applicable RBI guidelines for gold loan NBFCs.
+- Any disputes shall be subject to the jurisdiction of local courts.
+
+## Contact Us
+- For queries, please visit our office or contact us at the number provided at the time of loan.
+`;
