@@ -14,6 +14,7 @@ const TABS = [
   ['reports', '📄  Reports'],
   ['reportsMenu', '📋  All Reports'],
   ['ledger', '📒  Customer Ledger'],
+  ['events', '📅  Events'],
   ['more', '🗄️  Backup'],
   ['settings', '⚙️  Settings'],
   ['terms', '📜  Terms & Conditions'],
@@ -141,7 +142,7 @@ export default function App() {
     };
     screen = map[sub.name] || null;
   } else {
-    const titles = { home: 'K Jewels', summary: 'Member Summary', customers: 'Customers', loans: 'Loans', reports: 'Reports', reportsMenu: 'All Reports', ledger: 'Customer Ledger', more: 'Backup & Restore', settings: 'Settings', terms: 'Terms & Conditions' };
+    const titles = { home: 'K Jewels', summary: 'Member Summary', customers: 'Customers', loans: 'Loans', reports: 'Reports', reportsMenu: 'All Reports', ledger: 'Customer Ledger', events: 'Events', more: 'Backup & Restore', settings: 'Settings', terms: 'Terms & Conditions' };
     const menuBtn = (
       <TouchableOpacity onPress={() => setMenuOpen((v) => !v)} style={{ paddingHorizontal: 10 }}>
         <Text style={{ color: C.gold, fontSize: 22 }}>☰</Text>
@@ -163,6 +164,7 @@ export default function App() {
       reports: <S.Reports {...p} />,
       reportsMenu: <S.ReportsMenu {...p} />,
       ledger: <S.CustomerLedger db={db} back={() => setTab('home')} onMenuPress={() => setMenuOpen((v) => !v)} go={go} />,
+      events: <S.EventsScreen {...p} />,
       more: <S.Backup {...p} lock={() => setOk(false)} />,
       settings: <S.Profile {...p} />,
       terms: <S.TermsView db={db} back={() => setTab('home')} />,

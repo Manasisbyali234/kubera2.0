@@ -1,0 +1,82 @@
+﻿export function EventsScreen({ db, update }) {
+  const [events, setEvents] = useState(db.events || []);
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [note, setNote] = useState('');
+  const [showForm, setShowForm] = useState(false);
+
+  const saveEvent = async () => {
+    if (!title.trim()) return notify('Enter event title');
+    if (!date) return notify('Select a date');
+    const newEvent = { id: uid(), title: title.trim(), date, note: note.trim() };
+    const updated = [newEvent, ...events].sort((a, b) => (a.date > b.date ? 1 : -1));
+    setEvents(updated);
+    await update((d) => ({ ...d, events: updated }));
+    setTitle(''); setDate(''); setNote(''); setShowForm(false);
+  };
+
+  const remove = (id) => {
+    confirm('Delete this event?', async () => {
+      const updated = events.filter((e) => e.id !== id);
+      setEvents(updated);
+      await update((d) => ({ ...d, events: updated }));
+    }, 'Delete');
+  };
+
+  const todayStr = today();
+  const upcoming = events.filter((e) => e.date >= todayStr);
+  const past = events.filter((e) => e.date < todayStr);
+
+  return (
+    <Page>
+      <Btn title={showForm ? 'Cancel' : '+ Add Event'} kind={showForm ? 'ghost' : undefined} onPress={() => setShowForm((v) => !v)} />
+      {showForm && (
+        <View style={{ backgroundColor: C.goldSoft, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.gold + '55' }}>
+          <Field label="Event Title" value={title} onChangeText={setTitle} />
+          <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+          <CalendarPicker value={date} onChange={setDate} label="Select date" />
+          <Field label="Note (optional)" value={note} onChangeText={setNote} multiline />
+          <Btn title="Save Event" onPress={saveEvent} style={{ marginVertical: 0 }} />
+        </View>
+      )}
+
+      {events.length === 0 ? <Empty text="No events yet." /> : null}
+
+      {upcoming.length > 0 && (
+        <>
+          <Text style={{ fontWeight: '700', color: C.navy, fontSize: 14, marginBottom: 6, marginTop: 4 }}>Upcoming</Text>
+          {upcoming.map((e) => (
+            <View key={e.id} style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.line, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', fontSize: 15, color: C.text }}>{e.title}</Text>
+                <Text style={{ color: C.gold, fontSize: 13, marginTop: 2 }}>ðŸ“… {dmy(e.date)}</Text>
+                {e.note ? <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>{e.note}</Text> : null}
+              </View>
+              <TouchableOpacity onPress={() => remove(e.id)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ color: C.red, fontWeight: '700', fontSize: 13 }}>âœ•</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+
+      {past.length > 0 && (
+        <>
+          <Text style={{ fontWeight: '700', color: C.mute, fontSize: 14, marginBottom: 6, marginTop: 8 }}>Past</Text>
+          {past.map((e) => (
+            <View key={e.id} style={{ backgroundColor: '#F7FAFF', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.line, flexDirection: 'row', alignItems: 'center', opacity: 0.7 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '600', fontSize: 14, color: C.mute }}>{e.title}</Text>
+                <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>ðŸ“… {dmy(e.date)}</Text>
+                {e.note ? <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>{e.note}</Text> : null}
+              </View>
+              <TouchableOpacity onPress={() => remove(e.id)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ color: C.red, fontWeight: '700', fontSize: 13 }}>âœ•</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+    </Page>
+  );
+}

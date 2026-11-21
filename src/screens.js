@@ -3,12 +3,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, Image, Modal, Platform, ScrollView, Share, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, Image, Linking, Modal, Platform, ScrollView, Share, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import * as XLSX from 'xlsx';
 import { LIMIT, saveImage } from './storage';
 import { Btn, C, CalendarPicker, Card, Chip, DeletePinModal, Empty, Field, Header, PasswordModal, Row, s, SignaturePad, SuggestField } from './ui';
-import { addMonths, calc, confirm, dmy, inr, monthsBetween, nextCustomerSerial, nextSerial, notify, today, uid } from './utils';
+import { addMonths, calc, confirm, dmy, inr, monthsBetween, nextCustomerSerial, nextSerial, notify, today, uid, transliterateToKannada } from './utils';
 import { LedgerReportFormat, YearwiseKannadaReport } from './reports';
 
 const METALS = ['Gold', 'Silver', 'Others'];
@@ -582,13 +582,38 @@ export function DashboardConfig({ db, update, back }) {
 }
 
 /* ---------- Customers ---------- */
-export function Customers({ db, go }) {
+export function Customers({ db, go, update }) {
   const [q, setQ] = useState('');
+  const [bulkFilling, setBulkFilling] = useState(false);
   const list = db.customers.filter((c) => (c.name + c.phone).toLowerCase().includes(q.toLowerCase()));
+
+  const missingKannada = db.customers.filter((c) => !c.nameKannada || !c.nameKannada.trim());
+
+  const bulkFillKannada = async () => {
+    if (!missingKannada.length) return notify('All customers already have Kannada names!');
+    setBulkFilling(true);
+    let updated = [...db.customers];
+    for (const c of missingKannada) {
+      const kn = await transliterateToKannada(c.name);
+      if (kn) updated = updated.map((x) => x.id === c.id ? { ...x, nameKannada: kn } : x);
+    }
+    await update((d) => ({ ...d, customers: updated }));
+    setBulkFilling(false);
+    notify(`Done! Filled Kannada names for ${missingKannada.length} customers.`);
+  };
   return (
     <Page>
       <Field label="" value={q} onChangeText={setQ} placeholder="Search by name or phone" autoFocus={Platform.OS === 'web'} />
       <Btn title={`Add customer (${db.customers.length})`} onPress={() => go('customerForm')} />
+      {missingKannada.length > 0 && (
+        <TouchableOpacity onPress={bulkFillKannada} disabled={bulkFilling}
+          style={{ backgroundColor: bulkFilling ? '#ccc' : C.gold, borderRadius: 10, paddingVertical: 12,
+            alignItems: 'center', marginBottom: 10, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+            {bulkFilling ? 'Filling Kannada names…' : `ಕನ್ನಡ Auto-fill ${missingKannada.length} missing names`}
+          </Text>
+        </TouchableOpacity>
+      )}
       {list.length === 0 ? <Empty text="No customers yet." /> : null}
       {list.map((c) => (
         <Card key={c.id} onPress={() => go('statement', { id: c.id })} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -608,12 +633,22 @@ export function Customers({ db, go }) {
   );
 }
 
-const EMPTY_CUSTOMER = { name: '', phone: '', address: '', idType: 'Aadhaar', idNo: '', photo: null, idPhoto: null };
+const EMPTY_CUSTOMER = { name: '', nameKannada: '', phone: '', address: '', idType: 'Aadhaar', idNo: '', photo: null, idPhoto: null };
 
 export function CustomerForm({ db, update, back, goNext }) {
   const [f, setF] = useState(EMPTY_CUSTOMER);
+  const [translating, setTranslating] = useState(false);
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const refs = { phone: useRef(), address: useRef(), idType: useRef(), idNo: useRef() };
+
+  const autoKannada = async () => {
+    if (!f.name.trim()) return notify('Enter full name first');
+    setTranslating(true);
+    const kn = await transliterateToKannada(f.name);
+    setTranslating(false);
+    if (kn) setF((p) => ({ ...p, nameKannada: kn }));
+    else notify('Could not transliterate. Check internet connection.');
+  };
   const submit = async (andNext = false) => {
     if (!f.name.trim() || !f.phone.trim()) return notify('Name and phone are required');
     await update((d) => {
@@ -628,10 +663,24 @@ export function CustomerForm({ db, update, back, goNext }) {
     <Page>
       <Photo label="Customer photo" value={f.photo} onChange={set('photo')} />
       <Field label="Full name" value={f.name} onChangeText={set('name')} returnKeyType="next" onSubmitEditing={() => refs.phone.current?.focus()} />
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Field label="ಹೆಸರು (Name in Kannada)" value={f.nameKannada} onChangeText={set('nameKannada')} returnKeyType="next" onSubmitEditing={() => refs.phone.current?.focus()} />
+        </View>
+        <TouchableOpacity onPress={autoKannada} disabled={translating}
+          style={{ marginBottom: 12, backgroundColor: translating ? '#ccc' : C.gold, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 12 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{translating ? '...' : 'ಕನ್ನಡ'}</Text>
+        </TouchableOpacity>
+      </View>
       <Field label="Phone" value={f.phone} onChangeText={set('phone')} keyboardType="phone-pad" ref={refs.phone} returnKeyType="next" onSubmitEditing={() => refs.address.current?.focus()} />
       <Field label="Address" value={f.address} onChangeText={set('address')} multiline ref={refs.address} />
       <Field label="ID proof type" value={f.idType} onChangeText={set('idType')} ref={refs.idType} returnKeyType="next" onSubmitEditing={() => refs.idNo.current?.focus()} />
       <Field label="ID number" value={f.idNo} onChangeText={set('idNo')} ref={refs.idNo} />
+      <TouchableOpacity onPress={() => Linking.openURL('https://myaadhaarbeta.uidai.gov.in')}
+        style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 6 }}>
+        <Text style={{ color: C.navy, fontSize: 13, fontWeight: '600' }}>📥 Download Aadhaar Card</Text>
+        <Text style={{ color: C.gold, fontSize: 12 }}>↗</Text>
+      </TouchableOpacity>
       <Photo label="ID proof photo" value={f.idPhoto} onChange={set('idPhoto')} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Btn title="Save" onPress={() => submit(false)} style={{ flex: 1 }} />
@@ -645,9 +694,19 @@ export function CustomerEdit({ db, update, back, id }) {
   const [pwVisible, setPwVisible] = useState(!db.editPassword);
   const [unlocked, setUnlocked] = useState(!db.editPassword);
   const [deletePinVisible, setDeletePinVisible] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const cust = db.customers.find((c) => c.id === id);
   const [f, setF] = useState(cust ? { ...cust } : EMPTY_CUSTOMER);
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
+
+  const autoKannada = async () => {
+    if (!f.name.trim()) return notify('Enter full name first');
+    setTranslating(true);
+    const kn = await transliterateToKannada(f.name);
+    setTranslating(false);
+    if (kn) setF((p) => ({ ...p, nameKannada: kn }));
+    else notify('Could not transliterate. Check internet connection.');
+  };
   if (!cust) return null;
   const submit = async () => {
     if (!f.name.trim() || !f.phone.trim()) return notify('Name and phone are required');
@@ -675,10 +734,24 @@ export function CustomerEdit({ db, update, back, id }) {
     <Page>
       <Photo label="Customer photo" value={f.photo} onChange={set('photo')} />
       <Field label="Full name" value={f.name} onChangeText={set('name')} />
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Field label="ಹೆಸರು (Name in Kannada)" value={f.nameKannada || ''} onChangeText={set('nameKannada')} />
+        </View>
+        <TouchableOpacity onPress={autoKannada} disabled={translating}
+          style={{ marginBottom: 12, backgroundColor: translating ? '#ccc' : C.gold, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 12 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{translating ? '...' : 'ಕನ್ನಡ'}</Text>
+        </TouchableOpacity>
+      </View>
       <Field label="Phone" value={f.phone} onChangeText={set('phone')} keyboardType="phone-pad" />
       <Field label="Address" value={f.address} onChangeText={set('address')} multiline />
       <Field label="ID proof type" value={f.idType} onChangeText={set('idType')} />
       <Field label="ID number" value={f.idNo} onChangeText={set('idNo')} />
+      <TouchableOpacity onPress={() => Linking.openURL('https://myaadhaarbeta.uidai.gov.in')}
+        style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 6 }}>
+        <Text style={{ color: C.navy, fontSize: 13, fontWeight: '600' }}>📥 Download Aadhaar Card</Text>
+        <Text style={{ color: C.gold, fontSize: 12 }}>↗</Text>
+      </TouchableOpacity>
       <Photo label="ID proof photo" value={f.idPhoto} onChange={set('idPhoto')} />
       <Btn title="Save changes" onPress={submit} />
       <Btn title="Delete customer" kind="danger" onPress={requestDelete} />
@@ -2949,6 +3022,9 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
   const [reportFormat, setReportFormat] = useState('excel'); // 'excel' | 'statement' | 'ledgerReport' | 'yearwiseKannada'
   const [showFormatDropdown, setShowFormatDropdown] = useState(false);
   const [viewAllModal, setViewAllModal] = useState(false);
+  const [viewKannadaModal, setViewKannadaModal] = useState(false);
+  const [kannadaYear, setKannadaYear] = useState(String(new Date().getFullYear()));
+  const [kannadaMonth, setKannadaMonth] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [appliedFrom, setAppliedFrom] = useState('');
@@ -3198,6 +3274,12 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
             </TouchableOpacity>
           </View>
         )}
+        {reportFormat === 'yearwiseKannada' && (
+          <TouchableOpacity onPress={() => setViewKannadaModal(true)}
+            style={{ backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}>
+            <Text style={{ color: C.navy, fontWeight: '700', fontSize: 13 }}>👁 View</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Report Format Dropdown */}
@@ -3278,7 +3360,10 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
           </View>
 
           {/* Table */}
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ minWidth: 1160 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" scrollEventThrottle={16} overScrollMode="always"
+            nestedScrollEnabled={true}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={true} nestedScrollEnabled={true}>
+              <View style={{ minWidth: 1160 }}>
               {/* Table Header */}
               <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
                 {[
@@ -3310,6 +3395,8 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
                     <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
                   </View>
                 ))}
+              </View>
+            </ScrollView>
           </ScrollView>
         </View>
       )}
@@ -3364,7 +3451,7 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
       {reportFormat === 'ledgerReport' && <View style={{ flex: 1 }}><LedgerReportFormat db={db} /></View>}
 
       {/* Section 2: Year-wise Kannada Member Report */}
-      {reportFormat === 'yearwiseKannada' && <View style={{ flex: 1 }}><YearwiseKannadaReport db={db} /></View>}
+      {reportFormat === 'yearwiseKannada' && <View style={{ flex: 1 }}><YearwiseKannadaReport db={db} initialYear={kannadaYear} initialMonth={kannadaMonth} onYearChange={setKannadaYear} onMonthChange={setKannadaMonth} /></View>}
 
       {/* Statement Preview Modal */}
       <Modal visible={stmtPreview} animationType="slide" onRequestClose={() => setStmtPreview(false)}>
@@ -3472,6 +3559,19 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
         </View>
       </Modal>
 
+      {/* Yearwise Kannada View Modal */}
+      <Modal visible={viewKannadaModal} animationType="slide" onRequestClose={() => setViewKannadaModal(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.navy, paddingHorizontal: 14, paddingVertical: 12 }}>
+            <TouchableOpacity onPress={() => setViewKannadaModal(false)} style={{ paddingRight: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 22 }}>‹</Text>
+            </TouchableOpacity>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#fff' }}>ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ</Text>
+          </View>
+          <YearwiseKannadaReport db={db} initialYear={kannadaYear} initialMonth={kannadaMonth} onYearChange={setKannadaYear} onMonthChange={setKannadaMonth} />
+        </View>
+      </Modal>
+
       {/* View All Ledger Modal */}
       <Modal visible={viewAllModal} animationType="slide" onRequestClose={() => setViewAllModal(false)}>
         <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -3480,63 +3580,59 @@ export function CustomerLedger({ db, back, onMenuPress, go }) {
               <Text style={{ color: '#fff', fontSize: 22 }}>‹</Text>
             </TouchableOpacity>
             <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#fff' }}>Customer Ledger</Text>
-            <Text style={{ color: C.gold, fontSize: 13 }}>{rows.length} customers</Text>
           </View>
-          <View style={{ flexDirection: 'row', backgroundColor: '#F7FAFF', borderBottomWidth: 1, borderColor: '#D6E8FF', paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
-            {[
-              { label: 'Total Debit', value: inr(rows.reduce((s, r) => s + r.debit, 0)), color: C.red },
-              { label: 'Total Received', value: inr(rows.reduce((s, r) => s + r.received, 0)), color: C.green },
-              { label: 'Net Amount', value: inr(rows.reduce((s, r) => s + r.netAmount, 0)), color: C.gold },
-            ].map((item) => (
-              <View key={item.label} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: '#E8EDF2' }}>
-                <Text style={{ fontSize: 12, fontWeight: '800', color: item.color }} numberOfLines={1} adjustsFontSizeToFit>{item.value}</Text>
-                <Text style={{ fontSize: 10, color: C.mute, marginTop: 2 }}>{item.label}</Text>
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            scrollEventThrottle={16}
+            overScrollMode="always"
+          >
+            <ScrollView horizontal showsHorizontalScrollIndicator={true} nestedScrollEnabled={true}>
+              <View style={{ width: 1200 }}>
+                <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
+                  {[['SL',50],['CODE',80],['NAME',150],['ASSET',130],['PHONE',110],['AREA',130],['DEBIT',90],['DUE MONTH',110],['% DEBIT',70],['RECEIVED',90],['NET AMT',90],['INSTALL.',90]].map(([h,w]) => (
+                    <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
+                  ))}
+                </View>
+                {rows.length === 0 ? (
+                  <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                    <Text style={{ color: C.mute }}>No data found.</Text>
+                  </View>
+                ) : rows.map((r, i) => (
+                  <View key={r.custNo + i} style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E8EDF2', backgroundColor: i % 2 === 0 ? '#fff' : '#F7FAFF', paddingVertical: 9 }}>
+                    <Text style={[cell, { width: 50 }]}>{i + 1}</Text>
+                    <Text style={[cell, { width: 80 }]}>{r.custNo}</Text>
+                    <Text style={[cell, { width: 150, fontWeight: '600' }]}>{r.name}</Text>
+                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.asset}</Text>
+                    <Text style={[cell, { width: 110 }]}>{r.phone}</Text>
+                    <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.area}</Text>
+                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '600' }]}>{inr(r.debit)}</Text>
+                    <Text style={[cell, { width: 110 }]} numberOfLines={2}>{r.dueMonth}</Text>
+                    <Text style={[cell, { width: 70 }]}>{r.pctDebit}%</Text>
+                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '600' }]}>{inr(r.received)}</Text>
+                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '700' }]}>{inr(r.netAmount)}</Text>
+                    <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
+                  </View>
+                ))}
+                {rows.length > 0 && (
+                  <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', paddingVertical: 10 }}>
+                    <Text style={[cell, { width: 50 }]} />
+                    <Text style={[cell, { width: 80 }]} />
+                    <Text style={[cell, { width: 150, fontWeight: '800', color: C.navy }]}>TOTAL</Text>
+                    <Text style={[cell, { width: 130 }]} />
+                    <Text style={[cell, { width: 110 }]} />
+                    <Text style={[cell, { width: 130 }]} />
+                    <Text style={[cell, { width: 90, color: C.red, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.debit,0))}</Text>
+                    <Text style={[cell, { width: 110 }]} />
+                    <Text style={[cell, { width: 70 }]} />
+                    <Text style={[cell, { width: 90, color: C.green, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.received,0))}</Text>
+                    <Text style={[cell, { width: 90, color: C.gold, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.netAmount,0))}</Text>
+                    <Text style={[cell, { width: 90, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.installment,0))}</Text>
+                  </View>
+                )}
+                <View style={{ height: 40 }} />
               </View>
-            ))}
-          </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ minWidth: 1200 }} keyboardShouldPersistTaps="handled">
-            <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
-              {[['SL',50],['CODE',80],['NAME',150],['ASSET',130],['PHONE',110],['AREA',130],['DEBIT',90],['DUE MONTH',110],['% DEBIT',70],['RECEIVED',90],['NET AMT',90],['INSTALL.',90]].map(([h,w]) => (
-                <Text key={h} style={{ width: w, color: '#fff', fontWeight: '700', fontSize: 11, paddingHorizontal: 6, textAlign: 'center' }}>{h}</Text>
-              ))}
-            </View>
-            {rows.length === 0 ? (
-              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                <Text style={{ color: C.mute }}>No data found.</Text>
-              </View>
-            ) : rows.map((r, i) => (
-              <View key={r.custNo + i} style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E8EDF2', backgroundColor: i % 2 === 0 ? '#fff' : '#F7FAFF', paddingVertical: 9 }}>
-                <Text style={[cell, { width: 50 }]}>{i + 1}</Text>
-                <Text style={[cell, { width: 80 }]}>{r.custNo}</Text>
-                <Text style={[cell, { width: 150, fontWeight: '600' }]}>{r.name}</Text>
-                <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.asset}</Text>
-                <Text style={[cell, { width: 110 }]}>{r.phone}</Text>
-                <Text style={[cell, { width: 130 }]} numberOfLines={2}>{r.area}</Text>
-                <Text style={[cell, { width: 90, color: C.red, fontWeight: '600' }]}>{inr(r.debit)}</Text>
-                <Text style={[cell, { width: 110 }]} numberOfLines={2}>{r.dueMonth}</Text>
-                <Text style={[cell, { width: 70 }]}>{r.pctDebit}%</Text>
-                <Text style={[cell, { width: 90, color: C.green, fontWeight: '600' }]}>{inr(r.received)}</Text>
-                <Text style={[cell, { width: 90, color: C.gold, fontWeight: '700' }]}>{inr(r.netAmount)}</Text>
-                <Text style={[cell, { width: 90 }]}>{inr(r.installment)}</Text>
-              </View>
-            ))}
-            {rows.length > 0 && (
-              <View style={{ flexDirection: 'row', backgroundColor: '#D6E8FF', paddingVertical: 10 }}>
-                <Text style={[cell, { width: 50 }]} />
-                <Text style={[cell, { width: 80 }]} />
-                <Text style={[cell, { width: 150, fontWeight: '800', color: C.navy }]}>TOTAL</Text>
-                <Text style={[cell, { width: 130 }]} />
-                <Text style={[cell, { width: 110 }]} />
-                <Text style={[cell, { width: 130 }]} />
-                <Text style={[cell, { width: 90, color: C.red, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.debit,0))}</Text>
-                <Text style={[cell, { width: 110 }]} />
-                <Text style={[cell, { width: 70 }]} />
-                <Text style={[cell, { width: 90, color: C.green, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.received,0))}</Text>
-                <Text style={[cell, { width: 90, color: C.gold, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.netAmount,0))}</Text>
-                <Text style={[cell, { width: 90, fontWeight: '800' }]}>{inr(rows.reduce((s,r)=>s+r.installment,0))}</Text>
-              </View>
-            )}
-            <View style={{ height: 40 }} />
+            </ScrollView>
           </ScrollView>
         </View>
       </Modal>
@@ -4073,3 +4169,87 @@ const DUMMY_TERMS = `## Kuber Gold Loan – Terms & Conditions
 ## Contact Us
 - For queries, please visit our office or contact us at the number provided at the time of loan.
 `;
+
+/* ---------- Events Screen ---------- */
+export function EventsScreen({ db, update }) {
+  const [events, setEvents] = useState(db.events || []);
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [note, setNote] = useState('');
+  const [showForm, setShowForm] = useState(false);
+
+  const saveEvent = async () => {
+    if (!title.trim()) return notify('Enter event title');
+    if (!date) return notify('Select a date');
+    const newEvent = { id: uid(), title: title.trim(), date, note: note.trim() };
+    const updated = [newEvent, ...events].sort((a, b) => (a.date > b.date ? 1 : -1));
+    setEvents(updated);
+    await update((d) => ({ ...d, events: updated }));
+    setTitle(''); setDate(''); setNote(''); setShowForm(false);
+  };
+
+  const remove = (id) => {
+    confirm('Delete this event?', async () => {
+      const updated = events.filter((e) => e.id !== id);
+      setEvents(updated);
+      await update((d) => ({ ...d, events: updated }));
+    }, 'Delete');
+  };
+
+  const todayStr = today();
+  const upcoming = events.filter((e) => e.date >= todayStr);
+  const past = events.filter((e) => e.date < todayStr);
+
+  return (
+    <Page>
+      <Btn title={showForm ? 'Cancel' : '+ Add Event'} kind={showForm ? 'ghost' : undefined} onPress={() => setShowForm((v) => !v)} />
+      {showForm && (
+        <View style={{ backgroundColor: C.goldSoft, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.gold + '55' }}>
+          <Field label="Event Title" value={title} onChangeText={setTitle} />
+          <Text style={{ color: C.mute, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Date</Text>
+          <CalendarPicker value={date} onChange={setDate} label="Select date" />
+          <Field label="Note (optional)" value={note} onChangeText={setNote} multiline />
+          <Btn title="Save Event" onPress={saveEvent} style={{ marginVertical: 0 }} />
+        </View>
+      )}
+
+      {events.length === 0 ? <Empty text="No events yet." /> : null}
+
+      {upcoming.length > 0 && (
+        <>
+          <Text style={{ fontWeight: '700', color: C.navy, fontSize: 14, marginBottom: 6, marginTop: 4 }}>Upcoming</Text>
+          {upcoming.map((e) => (
+            <View key={e.id} style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.line, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', fontSize: 15, color: C.text }}>{e.title}</Text>
+                <Text style={{ color: C.gold, fontSize: 13, marginTop: 2 }}>📅 {dmy(e.date)}</Text>
+                {e.note ? <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>{e.note}</Text> : null}
+              </View>
+              <TouchableOpacity onPress={() => remove(e.id)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ color: C.red, fontWeight: '700', fontSize: 13 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+
+      {past.length > 0 && (
+        <>
+          <Text style={{ fontWeight: '700', color: C.mute, fontSize: 14, marginBottom: 6, marginTop: 8 }}>Past</Text>
+          {past.map((e) => (
+            <View key={e.id} style={{ backgroundColor: '#F7FAFF', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.line, flexDirection: 'row', alignItems: 'center', opacity: 0.7 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '600', fontSize: 14, color: C.mute }}>{e.title}</Text>
+                <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>📅 {dmy(e.date)}</Text>
+                {e.note ? <Text style={{ color: C.mute, fontSize: 12, marginTop: 2 }}>{e.note}</Text> : null}
+              </View>
+              <TouchableOpacity onPress={() => remove(e.id)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Text style={{ color: C.red, fontWeight: '700', fontSize: 13 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+    </Page>
+  );
+}

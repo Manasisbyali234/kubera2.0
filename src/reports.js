@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
@@ -8,6 +8,26 @@ import { C } from './ui';
 import { calc, dmy, inr, today } from './utils';
 
 const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Generate N monthly installment dates keeping the same day as the loan start date
+function instDates(dateStr, count = 12) {
+  const empty = Array(count).fill('');
+  if (!dateStr || typeof dateStr !== 'string') return empty;
+  const parts = dateStr.slice(0, 10).split('-');
+  if (parts.length !== 3) return empty;
+  const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
+  if (!y || !m || !d || isNaN(y) || isNaN(m) || isNaN(d)) return empty;
+  const dates = [];
+  for (let i = 0; i < count; i++) {
+    const dt = new Date(y, m - 1 + i, d);
+    dates.push(
+      String(dt.getDate()).padStart(2,'0') + '-' +
+      String(dt.getMonth()+1).padStart(2,'0') + '-' +
+      dt.getFullYear()
+    );
+  }
+  return dates;
+}
 
 /* ---- Section 1: Customer Ledger Report Format ---- */
 export function LedgerReportFormat({ db }) {
@@ -127,8 +147,14 @@ export function LedgerReportFormat({ db }) {
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>🖨 PDF</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        overScrollMode="always"
+      >
+        <ScrollView horizontal showsHorizontalScrollIndicator={true} nestedScrollEnabled={true}>
           <View>
             <View style={{ flexDirection: 'row', backgroundColor: C.navy, paddingVertical: 10 }}>
               {[['Date',90],['Name (Kannada)',160],['Interest',90],['Prev Month Bal',120],['Mobile',120],['Old Balance',100]].map(([h,w]) => (
@@ -190,11 +216,17 @@ function LoanDetailTable({ l, name }) {
 }
 
 /* ---- Section 2: Year-wise Member Report (Table View) ---- */
-export function YearwiseKannadaReport({ db }) {
+export function YearwiseKannadaReport({ db, initialYear, initialMonth, onYearChange, onMonthChange }) {
   const now = new Date();
-  const [selYear, setSelYear] = useState(String(now.getFullYear()));
-  const [selMonth, setSelMonth] = useState('');
+  const [selYear, setSelYear] = useState(initialYear || String(now.getFullYear()));
+  const [selMonth, setSelMonth] = useState(initialMonth || '');
   const [selDate, setSelDate] = useState('');
+
+  const handleYearChange = (y) => { setSelYear(y); setSelMonth(''); setSelDate(''); onYearChange?.(y); onMonthChange?.(''); };
+  const handleMonthChange = (m) => { setSelMonth(m); setSelDate(''); onMonthChange?.(m); };
+
+  useEffect(() => { if (initialYear) setSelYear(initialYear); }, [initialYear]);
+  useEffect(() => { setSelMonth(initialMonth || ''); }, [initialMonth]);
   const [searchQ, setSearchQ] = useState('');
   const loans = db.loans || [];
   const customers = db.customers || [];
@@ -226,7 +258,9 @@ export function YearwiseKannadaReport({ db }) {
       const monthlyDue = Math.round((l.principal * (l.rate || 0)) / 100);
       result.push({
         date: l.date || '',
-        custName: c.nameKannada || c.name || '-',
+        instDates: instDates(l.date), // array of 12 date strings
+        custName: c.nameKannada && c.nameKannada.trim() ? c.nameKannada : c.name || '-',
+        hasKannada: !!(c.nameKannada && c.nameKannada.trim()),
         principal: l.principal || 0,
         interest: Math.round(cv.interest),
         monthlyDue,
@@ -253,17 +287,18 @@ export function YearwiseKannadaReport({ db }) {
 
   const periodLabel = selMonth ? MN[parseInt(selMonth, 10) - 1] + ' ' + selYear : selYear;
 
+  const sortedForExport = (rows) => [...rows].sort((a, b) => {
+    const da = a.date.slice(8,10), db2 = b.date.slice(8,10);
+    if (da !== db2) return da.localeCompare(db2);
+    return a.date.slice(5,7).localeCompare(b.date.slice(5,7));
+  });
+
   const exportPDF = async () => {
     const shop = (db.settings || {}).shopName || 'Kuber Jewellery';
-    const tr = flatRows.map((r, i) => `<tr style="background:${i%2===0?'#fff':'#F7FAFF'}">
-      <td>${dmy(r.date)}</td><td>${r.custName}</td>
-      <td align="right">${inr(r.principal)}</td><td align="right">${inr(r.interest)}</td>
-      <td align="right">${inr(r.monthlyDue)}</td><td>${r.mobile}</td>
-      <td>${r.custNo}</td><td align="right">${inr(r.prevBalance)}</td>
-      <td align="right">${inr(r.amountPaid)}</td><td align="right">${inr(r.pending)}</td>
-      <td align="right">${inr(r.totPaid)}</td><td align="right">${inr(r.totInterest)}</td>
-      <td>${r.status === 'active' ? 'Active' : 'Closed'}</td><td>${r.remarks}</td></tr>`).join('');
-    const html = `<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:12px;font-size:10px}h2{color:#12263A;margin:0}h3{color:#B8912F;margin:4px 0 10px}table{width:100%;border-collapse:collapse}th{background:#12263A;color:#fff;padding:5px 6px;font-size:9px;white-space:nowrap}td{padding:4px 6px;border:1px solid #ddd;white-space:nowrap}.tot{background:#D6E8FF;font-weight:bold}</style></head><body><h2>${shop}</h2><h3>ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ &mdash; ${periodLabel}</h3><table><thead><tr><th>Date</th><th>Customer Name</th><th>Principal</th><th>Interest</th><th>Monthly Due</th><th>Mobile</th><th>Cust No</th><th>Prev Balance</th><th>Amt Paid</th><th>Pending</th><th>Total Paid</th><th>Total Interest</th><th>Status</th><th>Remarks</th></tr></thead><tbody>${tr}</tbody><tfoot><tr class="tot"><td colspan="2">TOTAL (${flatRows.length})</td><td align="right">${inr(grandPrincipal)}</td><td align="right">${inr(grandInterest)}</td><td></td><td></td><td></td><td></td><td align="right">${inr(grandPaid)}</td><td align="right">${inr(grandPending)}</td><td align="right">${inr(grandPaid)}</td><td align="right">${inr(grandInterest)}</td><td></td><td></td></tr></tfoot></table></body></html>`;
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const tr = sortedForExport(flatRows).map((r, i) => `<tr style="background:${i%2===0?'#fff':'#F7FAFF'}"><td>${i+1}</td><td>${esc(dmy(r.date))}</td><td>${esc(r.custName)}</td><td align="right">${esc(inr(r.principal))}</td><td align="right">${esc(inr(r.interest))}</td><td align="right">${esc(inr(r.monthlyDue))}</td><td>${esc(r.mobile)}</td><td>${esc(r.custNo)}</td><td align="right">${esc(inr(r.prevBalance))}</td><td align="right">${esc(inr(r.amountPaid))}</td><td align="right">${esc(inr(r.pending))}</td><td align="right">${esc(inr(r.totPaid))}</td><td align="right">${esc(inr(r.totInterest))}</td><td>${r.status === 'active' ? 'Active' : 'Closed'}</td><td>${esc(r.remarks)}</td>${r.instDates.map(d=>`<td>${esc(d)}</td>`).join('')}</tr>`).join('');
+    const instTh = Array.from({length:12},(_,i)=>`<th>Inst ${i+1}</th>`).join('');
+    const html = `<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:12px;font-size:10px}.report-title{text-align:center;margin-bottom:14px}.report-title h2{color:#12263A;font-size:16px;font-weight:bold;margin:0 0 4px}.report-title p{color:#B8912F;font-size:12px;margin:0}table{width:100%;border-collapse:collapse}th{background:#12263A;color:#fff;padding:5px 6px;font-size:9px;white-space:nowrap}td{padding:4px 6px;border:1px solid #ddd;white-space:nowrap}.tot{background:#D6E8FF;font-weight:bold}</style></head><body><div class="report-title"><h2>${shop} &ndash; ${selYear} Year-wise Member Report</h2><p>ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ &middot; ${selYear}</p></div><table><thead><tr><th>SL No</th><th>Date</th><th>ಗ್ರಾಹಕರ ಹೆಸರು</th><th>Principal</th><th>Interest</th><th>Monthly Due</th><th>Mobile</th><th>Cust No</th><th>Prev Balance</th><th>Amt Paid</th><th>Pending</th><th>Total Paid</th><th>Total Interest</th><th>Status</th><th>Remarks</th>${instTh}</tr></thead><tbody>${tr}</tbody><tfoot><tr class="tot"><td colspan="3">TOTAL (${flatRows.length})</td><td align="right">${inr(grandPrincipal)}</td><td align="right">${inr(grandInterest)}</td><td></td><td></td><td></td><td></td><td align="right">${inr(grandPaid)}</td><td align="right">${inr(grandPending)}</td><td align="right">${inr(grandPaid)}</td><td align="right">${inr(grandInterest)}</td><td></td><td></td>${Array(12).fill('<td></td>').join('')}</tr></tfoot></table></body></html>`;
     if (Platform.OS === 'web') { const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print(); }
     else { const { uri } = await Print.printToFileAsync({ html }); await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export PDF' }); }
   };
@@ -271,11 +306,13 @@ export function YearwiseKannadaReport({ db }) {
   const exportExcel = () => {
     const shop = (db.settings || {}).shopName || 'Kuber Jewellery';
     const wb = XLSX.utils.book_new();
-    const hdr = ['Date','Customer Name','Principal','Interest','Monthly Due','Mobile','Customer No','Prev Balance','Amount Paid','Pending','Total Paid','Total Interest','Status','Remarks'];
-    const data = flatRows.map((r) => [dmy(r.date), r.custName, r.principal, r.interest, r.monthlyDue, r.mobile, r.custNo, r.prevBalance, r.amountPaid, r.pending, r.totPaid, r.totInterest, r.status, r.remarks]);
+    const instHdr = Array.from({length:12},(_,i)=>`Inst ${i+1}`);
+    const hdr = ['SL No','Date','ಗ್ರಾಹಕರ ಹೆಸರು','Principal','Interest','Monthly Due','Mobile','Customer No','Prev Balance','Amount Paid','Pending','Total Paid','Total Interest','Status','Remarks',...instHdr];
+    const data = sortedForExport(flatRows).map((r, i) => [i+1, dmy(r.date), r.custName, r.principal, r.interest, r.monthlyDue, r.mobile, r.custNo, r.prevBalance, r.amountPaid, r.pending, r.totPaid, r.totInterest, r.status, r.remarks, ...r.instDates]);
     const tag = selMonth ? MN[parseInt(selMonth,10)-1]+'_'+selYear : selYear;
-    const ws = XLSX.utils.aoa_to_sheet([[shop+' - ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ - '+periodLabel],['ದಿನಾಂಕ: '+dmy(today())],[],hdr,...data,['ಒಟ್ಟು','',grandPrincipal,grandInterest,'','','','',grandPaid,grandPending,grandPaid,grandInterest,'','']]);
-    ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:12},{wch:14},{wch:10},{wch:20}];
+    const instCols = Array.from({length:12},()=>({wch:13}));
+    const ws = XLSX.utils.aoa_to_sheet([[shop+' – '+selYear+' Year-wise Member Report'],['ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ · '+selYear],['ದಿನಾಂಕ: '+dmy(today())],[],hdr,...data,['ಒಟ್ಟು','','',grandPrincipal,grandInterest,'','','','',grandPaid,grandPending,grandPaid,grandInterest,'','',...Array(12).fill('')]]);
+    ws['!cols'] = [{wch:6},{wch:12},{wch:22},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:12},{wch:14},{wch:10},{wch:20},...instCols];
     XLSX.utils.book_append_sheet(wb, ws, tag.slice(0,31));
     if (Platform.OS === 'web') { XLSX.writeFile(wb, 'varshavaru_sadasya_varadi_'+tag+'.xlsx'); }
     else {
@@ -287,8 +324,9 @@ export function YearwiseKannadaReport({ db }) {
   };
 
   const COLS = [
+    { key: 'slNo',        label: 'SL No',          w: 50,  align: 'center' },
     { key: 'date',        label: 'Date',           w: 96,  align: 'center' },
-    { key: 'custName',    label: 'Customer Name',  w: 160, align: 'left'   },
+    { key: 'custName',    label: 'ಗ್ರಾಹಕರ ಹೆಸರು',   w: 160, align: 'left'   },
     { key: 'principal',   label: 'Principal',      w: 100, align: 'right'  },
     { key: 'interest',    label: 'Interest',       w: 100, align: 'right'  },
     { key: 'monthlyDue',  label: 'Monthly Due',    w: 100, align: 'right'  },
@@ -301,12 +339,16 @@ export function YearwiseKannadaReport({ db }) {
     { key: 'totInterest', label: 'Total Interest', w: 110, align: 'right'  },
     { key: 'status',      label: 'Status',         w: 80,  align: 'center' },
     { key: 'remarks',     label: 'Remarks',        w: 140, align: 'left'   },
+    ...Array.from({length:12},(_,i)=>({ key: `inst_${i}`, label: `Inst ${i+1}`, w: 100, align: 'center' })),
   ];
   const totalW = COLS.reduce((s, c) => s + c.w, 0);
 
-  const cellVal = (r, key) => {
+  const cellVal = (r, key, idx) => {
+    if (key === 'slNo') return String(idx + 1);
     if (key === 'date') return dmy(r.date);
+    if (key === 'custName') return r.custName;
     if (key === 'status') return r.status === 'active' ? '● Active' : '✓ Closed';
+    if (key.startsWith('inst_')) return r.instDates[parseInt(key.split('_')[1])] || '-';
     if (['principal','interest','monthlyDue','prevBalance','amountPaid','pending','totPaid','totInterest'].includes(key)) return inr(r[key]);
     return r[key] || '-';
   };
@@ -318,6 +360,7 @@ export function YearwiseKannadaReport({ db }) {
     return '#1B2733';
   };
   const totVal = (key) => {
+    if (key === 'slNo') return '';
     if (key === 'principal') return inr(grandPrincipal);
     if (key === 'interest' || key === 'totInterest') return inr(grandInterest);
     if (key === 'amountPaid' || key === 'totPaid') return inr(grandPaid);
@@ -330,7 +373,7 @@ export function YearwiseKannadaReport({ db }) {
     <View style={{ flex: 1, backgroundColor: '#F4F7FB' }}>
       {/* Header */}
       <View style={{ backgroundColor: '#12263A', paddingHorizontal: 16, paddingVertical: 12 }}>
-        <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 16 }}>Kuber Jewellery – {selYear} Year-wise Member Report</Text>
+        <Text style={{ color: '#B8912F', fontWeight: '800', fontSize: 16 }}>{(db.settings || {}).shopName || 'Kuber Jewellery'} – {selYear} Year-wise Member Report</Text>
         <Text style={{ color: '#B9C6D3', fontSize: 11, marginTop: 2 }}>ವರ್ಷವಾರು ಸದಸ್ಯರ ವರದಿ · {periodLabel}</Text>
       </View>
       {/* Filters */}
@@ -339,7 +382,7 @@ export function YearwiseKannadaReport({ db }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {years.map((y) => (
-              <TouchableOpacity key={y} onPress={() => { setSelYear(y); setSelMonth(''); setSelDate(''); }}
+              <TouchableOpacity key={y} onPress={() => handleYearChange(y)}
                 style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, borderWidth: 1,
                   borderColor: selYear === y ? '#B8912F' : '#D0DCF0', backgroundColor: selYear === y ? '#B8912F' : '#fff' }}>
                 <Text style={{ color: selYear === y ? '#fff' : '#1B2733', fontWeight: '700', fontSize: 13 }}>{y}</Text>
@@ -351,7 +394,7 @@ export function YearwiseKannadaReport({ db }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {['', ...MN.map((_, i) => String(i + 1).padStart(2, '0'))].map((m, idx) => (
-              <TouchableOpacity key={m || 'all'} onPress={() => { setSelMonth(m); setSelDate(''); }}
+              <TouchableOpacity key={m || 'all'} onPress={() => handleMonthChange(m)}
                 style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 18, borderWidth: 1,
                   borderColor: selMonth === m ? C.navy : '#D0DCF0', backgroundColor: selMonth === m ? C.navy : '#fff' }}>
                 <Text style={{ color: selMonth === m ? '#fff' : '#1B2733', fontSize: 12 }}>{m ? MN[idx - 1] : 'All Months'}</Text>
@@ -395,8 +438,14 @@ export function YearwiseKannadaReport({ db }) {
           <Text style={{ color: '#6B7A8A', fontSize: 14 }}>No records for {periodLabel}.</Text>
         </View>
       ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          overScrollMode="always"
+        >
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} nestedScrollEnabled={true}>
             <View style={{ minWidth: totalW }}>
               {/* Column Headers */}
               <View style={{ flexDirection: 'row', backgroundColor: '#12263A', paddingVertical: 10 }}>
@@ -414,7 +463,7 @@ export function YearwiseKannadaReport({ db }) {
                       style={{ width: col.w, fontSize: 12, paddingHorizontal: 6,
                         textAlign: col.align, color: cellColor(r, col.key),
                         fontWeight: ['custName','principal'].includes(col.key) ? '600' : '400' }}>
-                      {cellVal(r, col.key)}
+                      {cellVal(r, col.key, i)}
                     </Text>
                   ))}
                 </View>

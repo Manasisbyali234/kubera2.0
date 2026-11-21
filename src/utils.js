@@ -58,6 +58,24 @@ export function monthsBetween(a, b) {
   return Math.max(0, db.getDate() < da.getDate() ? m - 1 : m);
 }
 
+// Transliterate English text to Kannada using Google's free API
+export async function transliterateToKannada(text) {
+  if (!text || !text.trim()) return '';
+  try {
+    const words = text.trim().split(/\s+/);
+    const results = await Promise.all(words.map(async (word) => {
+      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=kn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json[0] === 'SUCCESS' && json[1]?.[0]?.[1]?.[0]) return json[1][0][1][0];
+      return word;
+    }));
+    return results.join(' ');
+  } catch {
+    return '';
+  }
+}
+
 // interestMode: 'day' (pro-rated daily, default) | 'month' (completed months only)
 export function calc(loan, payments) {
   const end = loan.status === 'closed' && loan.closedOn ? loan.closedOn : today();
